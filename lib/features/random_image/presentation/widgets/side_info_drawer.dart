@@ -157,8 +157,9 @@ class _MetadataPanel extends StatelessWidget {
     final title = gallery?.title;
     final category = gallery?.category;
     final tags = metadata.tags;
-    final knownTags =
-        state.userTags.map((tag) => tag.toLowerCase()).toSet(growable: false);
+    final knownTags = Set<String>.unmodifiable(
+      state.userTags.map((tag) => tag.toLowerCase()),
+    );
 
     return Container(
       padding: const EdgeInsets.all(12),
