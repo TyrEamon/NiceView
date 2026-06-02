@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -6,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/app_exceptions.dart';
+import '../domain/image_metadata.dart';
 
 final veilApiClientProvider = Provider<VeilApiClient>((ref) {
   return VeilApiClient();
@@ -45,6 +47,83 @@ class VeilApiClient {
 
   Future<VeilImageResponse> imageById(int imageId) {
     return _imageRequest('/v1/image/$imageId');
+  }
+
+  Future<ImageMetadata> imageMetadataById(int imageId) async {
+    final uri = Uri.https(_host, '/v1/image/$imageId/meta');
+    _log('GET $uri');
+
+    late final HttpClientResponse response;
+    try {
+      final request = await _client.getUrl(uri).timeout(_receiveTimeout);
+      request.headers
+        ..set(HttpHeaders.acceptHeader, 'application/json')
+        ..set(HttpHeaders.userAgentHeader, 'NiceView/1.0');
+      response = await request.close().timeout(_receiveTimeout);
+    } on TimeoutException catch (error) {
+      _log('metadata request timeout: $error');
+      throw const NiceViewException('元数据请求超时，稍后再试');
+    } on SocketException catch (error) {
+      _log('metadata socket error: $error');
+      throw const NiceViewException('网络连接失败，稍后再试');
+    } on HandshakeException catch (error) {
+      _log('metadata tls error: $error');
+      throw const NiceViewException('安全连接失败，稍后再试');
+    } on HttpException catch (error) {
+      _log('metadata http error: $error');
+      throw NiceViewException(error.message);
+    }
+
+    final statusCode = response.statusCode;
+    final contentType = response.headers.contentType?.mimeType ??
+        response.headers.value(HttpHeaders.contentTypeHeader);
+    _log('metadata response $statusCode type=$contentType');
+
+    late final List<int> bytes;
+    try {
+      final builder = BytesBuilder(copy: false);
+      await for (final chunk in response.timeout(_receiveTimeout)) {
+        builder.add(chunk);
+      }
+      bytes = builder.takeBytes();
+    } on TimeoutException catch (error) {
+      _log('metadata body timeout: $error');
+      throw const NiceViewException('元数据下载超时，稍后再试');
+    } on SocketException catch (error) {
+      _log('metadata body socket error: $error');
+      throw const NiceViewException('元数据下载中断，稍后再试');
+    } on HttpException catch (error) {
+      _log('metadata body http error: $error');
+      throw const NiceViewException('元数据下载中断，稍后再试');
+    }
+
+    if (statusCode == 429) {
+      throw const ServerLockoutException('请求太快了，请稍后再试');
+    }
+    if (statusCode == 404) {
+      throw const ImageNotFoundException('图片不存在');
+    }
+    if (statusCode == 403) {
+      throw const NiceViewException('IP 已被封禁，请联系管理员');
+    }
+    if (statusCode == 503) {
+      throw const NiceViewException('接口已被管理员关闭');
+    }
+    if (statusCode < 200 || statusCode >= 300) {
+      throw NiceViewException('服务器暂时不可用：$statusCode');
+    }
+
+    try {
+      return ImageMetadata.fromJson(
+        Map<String, Object?>.from(jsonDecode(utf8.decode(bytes)) as Map),
+      );
+    } on FormatException catch (error) {
+      _log('metadata parse error: $error');
+      throw const NiceViewException('元数据解析失败');
+    } on TypeError catch (error) {
+      _log('metadata shape error: $error');
+      throw const NiceViewException('元数据格式不完整');
+    }
   }
 
   Future<VeilImageResponse> _imageRequest(

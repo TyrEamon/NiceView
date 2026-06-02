@@ -36,7 +36,7 @@ class FloatingNextButton extends StatelessWidget {
                       dimension: 22,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.arrow_forward_rounded, size: 28),
+                  : const Icon(Icons.shuffle_rounded, size: 26),
             ),
           ),
         ),

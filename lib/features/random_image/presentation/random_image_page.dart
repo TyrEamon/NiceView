@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import '../../../app/theme.dart';
 import '../../../services/quota_service.dart';
 import 'history_page.dart';
 import 'random_image_controller.dart';
+import 'widgets/floating_adjacent_buttons.dart';
 import 'widgets/floating_download_button.dart';
 import 'widgets/floating_next_button.dart';
 import 'widgets/image_stage.dart';
@@ -81,10 +83,18 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                 final buttonOpacity =
                     (state.isImageZoomed ? 0.38 : 0.60) * (1 - progress * 0.35);
                 final padding = MediaQuery.of(context).padding;
+                final isAdjacentLoading = state.adjacentLoadingDelta != null;
                 final canNext = !quota.isServerLocked &&
                     !state.isInitialLoading &&
                     !state.isNextLoading &&
+                    !isAdjacentLoading &&
                     (state.preloadQueue.isNotEmpty || quota.canAcquire);
+                final canOpenAdjacent = !quota.isServerLocked &&
+                    !state.isInitialLoading &&
+                    !state.isNextLoading &&
+                    !isAdjacentLoading &&
+                    state.currentImage?.imageId != null &&
+                    quota.canAcquire;
                 final drawerDragEnabled =
                     !state.isImageZoomed && !quota.isServerLocked;
 
@@ -108,8 +118,9 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                           children: [
                             ImageStage(
                               image: state.currentImage,
-                              isLoading:
-                                  state.isInitialLoading || state.isNextLoading,
+                              isLoading: state.isInitialLoading ||
+                                  state.isNextLoading ||
+                                  isAdjacentLoading,
                               errorMessage: state.lastLoadError,
                               onRetry: controller.retryCurrent,
                               onSwipeLeft: () {
@@ -137,6 +148,24 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                                     : controller.downloadCurrentImage,
                                 isLoading: state.isDownloading,
                                 opacity: buttonOpacity,
+                              ),
+                            ),
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: padding.bottom + 28,
+                              child: Center(
+                                child: FloatingAdjacentButtons(
+                                  enabled: canOpenAdjacent,
+                                  loadingDelta: state.adjacentLoadingDelta,
+                                  opacity: buttonOpacity,
+                                  onPrevious: () {
+                                    unawaited(controller.openAdjacentImage(-1));
+                                  },
+                                  onNext: () {
+                                    unawaited(controller.openAdjacentImage(1));
+                                  },
+                                ),
                               ),
                             ),
                             Positioned(
@@ -169,6 +198,12 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                         onAddTag: _showAddTagSheet,
                         onDeleteTag: (tag) => _confirmDeleteTag(tag),
                         onOpenHistory: _openHistory,
+                        onLoadMetadata: () {
+                          unawaited(controller.loadCurrentMetadata());
+                        },
+                        onMetadataTagSelected: (tag) {
+                          unawaited(controller.useMetadataTag(tag));
+                        },
                       ),
                     ),
                     if (progress > 0.02)

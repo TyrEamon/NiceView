@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../services/app_exceptions.dart';
 import '../../../services/quota_service.dart';
+import '../domain/image_metadata.dart';
 import '../domain/random_image.dart';
 import 'veil_api_client.dart';
 
@@ -35,6 +36,15 @@ class RandomImageRepository {
       () => _apiClient.imageById(imageId),
       sourceTag: sourceTag,
     );
+  }
+
+  Future<ImageMetadata> fetchImageMetadata(int imageId) async {
+    try {
+      return await _apiClient.imageMetadataById(imageId);
+    } on ServerLockoutException {
+      await _quotaController.startServerLockout();
+      rethrow;
+    }
   }
 
   Future<RandomImage> _quotaGuardedFetch(

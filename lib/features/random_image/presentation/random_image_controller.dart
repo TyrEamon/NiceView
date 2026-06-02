@@ -12,6 +12,7 @@ import '../../tags/data/local_tag_store.dart';
 import '../data/history_store.dart';
 import '../data/random_image_repository.dart';
 import '../domain/history_image.dart';
+import '../domain/image_metadata.dart';
 import '../domain/quota_state.dart';
 import '../domain/random_image.dart';
 
@@ -45,7 +46,10 @@ class RandomImageViewState {
     required this.isPreloading,
     required this.isNextLoading,
     required this.isDownloading,
+    required this.isMetadataLoading,
     this.currentImage,
+    this.currentMetadata,
+    this.adjacentLoadingDelta,
     this.selectedTag,
     this.errorMessage,
     this.lastLoadError,
@@ -64,10 +68,13 @@ class RandomImageViewState {
       isPreloading: false,
       isNextLoading: false,
       isDownloading: false,
+      isMetadataLoading: false,
     );
   }
 
   final RandomImage? currentImage;
+  final ImageMetadata? currentMetadata;
+  final int? adjacentLoadingDelta;
   final List<RandomImage> preloadQueue;
   final List<HistoryImage> historyImages;
   final int preloadTarget;
@@ -80,11 +87,14 @@ class RandomImageViewState {
   final bool isPreloading;
   final bool isNextLoading;
   final bool isDownloading;
+  final bool isMetadataLoading;
   final String? errorMessage;
   final String? lastLoadError;
 
   RandomImageViewState copyWith({
     Object? currentImage = _unset,
+    Object? currentMetadata = _unset,
+    Object? adjacentLoadingDelta = _unset,
     List<RandomImage>? preloadQueue,
     List<HistoryImage>? historyImages,
     int? preloadTarget,
@@ -97,6 +107,7 @@ class RandomImageViewState {
     bool? isPreloading,
     bool? isNextLoading,
     bool? isDownloading,
+    bool? isMetadataLoading,
     Object? errorMessage = _unset,
     Object? lastLoadError = _unset,
   }) {
@@ -104,6 +115,12 @@ class RandomImageViewState {
       currentImage: identical(currentImage, _unset)
           ? this.currentImage
           : currentImage as RandomImage?,
+      currentMetadata: identical(currentMetadata, _unset)
+          ? this.currentMetadata
+          : currentMetadata as ImageMetadata?,
+      adjacentLoadingDelta: identical(adjacentLoadingDelta, _unset)
+          ? this.adjacentLoadingDelta
+          : adjacentLoadingDelta as int?,
       preloadQueue: preloadQueue ?? this.preloadQueue,
       historyImages: historyImages ?? this.historyImages,
       preloadTarget: preloadTarget ?? this.preloadTarget,
@@ -119,6 +136,7 @@ class RandomImageViewState {
       isPreloading: isPreloading ?? this.isPreloading,
       isNextLoading: isNextLoading ?? this.isNextLoading,
       isDownloading: isDownloading ?? this.isDownloading,
+      isMetadataLoading: isMetadataLoading ?? this.isMetadataLoading,
       errorMessage: identical(errorMessage, _unset)
           ? this.errorMessage
           : errorMessage as String?,
@@ -250,8 +268,11 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
       _pendingConsumedPreloadPaths.add(next.localFilePath);
       state = state.copyWith(
         currentImage: next,
+        currentMetadata: null,
+        adjacentLoadingDelta: null,
         preloadQueue: queue,
         isImageZoomed: false,
+        isMetadataLoading: false,
         consecutivePreloadExhaustions: browsing.exhaustions,
         isFastBrowseMode: browsing.isFast,
         preloadTarget: browsing.target,
@@ -293,15 +314,169 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     await _tagStore.saveSelectedTag(effectiveTag);
     state = state.copyWith(
       selectedTag: effectiveTag,
+      currentMetadata: null,
+      adjacentLoadingDelta: null,
       preloadQueue: const [],
       preloadTarget: _defaultPreloadTarget,
       isFastBrowseMode: false,
       consecutivePreloadExhaustions: 0,
       isImageZoomed: false,
+      isMetadataLoading: false,
       errorMessage: null,
     );
 
     await _loadFreshCurrent();
+  }
+
+  Future<void> loadCurrentMetadata() async {
+    final imageId = state.currentImage?.imageId;
+    if (imageId == null) {
+      state = state.copyWith(errorMessage: '当前图片没有 Image ID，无法获取元数据');
+      return;
+    }
+    if (state.isMetadataLoading || state.currentMetadata?.id == imageId) {
+      return;
+    }
+
+    final generation = _generation;
+    state = state.copyWith(isMetadataLoading: true, errorMessage: null);
+    try {
+      final metadata = await _repository.fetchImageMetadata(imageId);
+      if (!mounted ||
+          generation != _generation ||
+          state.currentImage?.imageId != imageId) {
+        return;
+      }
+      state = state.copyWith(
+        currentMetadata: metadata,
+        isMetadataLoading: false,
+      );
+    } catch (error) {
+      if (mounted &&
+          generation == _generation &&
+          state.currentImage?.imageId == imageId) {
+        state = state.copyWith(
+          isMetadataLoading: false,
+          errorMessage: _messageForError(error),
+        );
+      }
+    }
+  }
+
+  Future<void> useMetadataTag(String value) async {
+    final tag = value.trim();
+    if (tag.isEmpty) {
+      return;
+    }
+    final existingTag = state.userTags.cast<String?>().firstWhere(
+          (item) => item?.toLowerCase() == tag.toLowerCase(),
+          orElse: () => null,
+        );
+    final effectiveTag = existingTag ?? tag;
+    if (existingTag == null) {
+      final tags = [...state.userTags, tag];
+      await _tagStore.saveTags(tags);
+      state = state.copyWith(userTags: tags);
+    }
+    await switchTag(effectiveTag);
+  }
+
+  Future<void> openAdjacentImage(int delta) async {
+    if (delta != -1 && delta != 1) {
+      return;
+    }
+    final current = state.currentImage;
+    final imageId = current?.imageId;
+    if (current == null || imageId == null) {
+      state = state.copyWith(errorMessage: '当前图片没有 Image ID，无法相邻查看');
+      return;
+    }
+    if (state.isInitialLoading ||
+        state.isNextLoading ||
+        state.adjacentLoadingDelta != null) {
+      return;
+    }
+    if (_readQuotaState().isServerLocked) {
+      state = state.copyWith(errorMessage: '歇 60 秒，让服务器也喝口水。');
+      return;
+    }
+
+    final targetId = imageId + delta;
+    if (targetId <= 0) {
+      state = state.copyWith(errorMessage: '已经到头了');
+      return;
+    }
+
+    final generation = _generation;
+    state = state.copyWith(
+      adjacentLoadingDelta: delta,
+      errorMessage: null,
+      lastLoadError: null,
+    );
+
+    try {
+      final currentGalleryId = await _currentGalleryId(
+        imageId,
+        generation: generation,
+      );
+      if (currentGalleryId == null) {
+        if (mounted && generation == _generation) {
+          state = state.copyWith(
+            adjacentLoadingDelta: null,
+            errorMessage: '当前图片没有图包信息',
+          );
+        }
+        return;
+      }
+
+      final metadata = await _repository.fetchImageMetadata(targetId);
+      if (!mounted ||
+          generation != _generation ||
+          state.currentImage?.imageId != imageId) {
+        return;
+      }
+      if (metadata.gallery?.id != currentGalleryId) {
+        state = state.copyWith(
+          adjacentLoadingDelta: null,
+          errorMessage: delta > 0 ? '已经是图包最后一张' : '已经是图包第一张',
+        );
+        return;
+      }
+
+      final image = await _repository.fetchImageById(
+        targetId,
+        sourceTag: current.sourceTag,
+      );
+      if (!mounted ||
+          generation != _generation ||
+          state.currentImage?.imageId != imageId) {
+        return;
+      }
+      _rememberImageId(image.imageId);
+      final historyImages = await _historyStore.upsertFromRandomImage(image);
+      if (!mounted ||
+          generation != _generation ||
+          state.currentImage?.imageId != imageId) {
+        return;
+      }
+      state = state.copyWith(
+        currentImage: image,
+        currentMetadata: metadata,
+        historyImages: historyImages,
+        adjacentLoadingDelta: null,
+        isImageZoomed: false,
+        lastLoadError: null,
+      );
+    } catch (error) {
+      if (mounted &&
+          generation == _generation &&
+          state.currentImage?.imageId == imageId) {
+        state = state.copyWith(
+          adjacentLoadingDelta: null,
+          errorMessage: _messageForError(error),
+        );
+      }
+    }
   }
 
   Future<bool> addTag(String value) async {
@@ -411,6 +586,26 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     await _loadFreshCurrent(isInitial: state.currentImage == null);
   }
 
+  Future<int?> _currentGalleryId(
+    int imageId, {
+    required int generation,
+  }) async {
+    final currentGalleryId =
+        state.currentMetadata?.gallery?.id ?? state.currentImage?.galleryId;
+    if (currentGalleryId != null) {
+      return currentGalleryId;
+    }
+
+    final metadata = await _repository.fetchImageMetadata(imageId);
+    if (!mounted ||
+        generation != _generation ||
+        state.currentImage?.imageId != imageId) {
+      return null;
+    }
+    state = state.copyWith(currentMetadata: metadata);
+    return metadata.gallery?.id;
+  }
+
   Future<RandomImage?> _restoreLastCurrent(
     List<HistoryImage> historyImages,
   ) async {
@@ -452,6 +647,9 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     state = state.copyWith(
       isInitialLoading: isInitial && state.currentImage == null,
       isNextLoading: !isInitial || state.currentImage != null,
+      currentMetadata: null,
+      adjacentLoadingDelta: null,
+      isMetadataLoading: false,
       errorMessage: null,
       lastLoadError: null,
     );
@@ -469,6 +667,8 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
       }
       state = state.copyWith(
         currentImage: image,
+        currentMetadata: null,
+        adjacentLoadingDelta: null,
         historyImages: historyImages,
         isInitialLoading: false,
         isNextLoading: false,

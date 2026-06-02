@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nice_view/features/random_image/data/random_image_repository.dart';
 import 'package:nice_view/features/random_image/domain/history_image.dart';
+import 'package:nice_view/features/random_image/domain/image_metadata.dart';
 import 'package:nice_view/features/random_image/domain/random_image.dart';
 
 void main() {
@@ -62,5 +63,30 @@ void main() {
     expect(images.single.imageId, 99);
     expect(images.single.sourceTag, '原神');
     expect(images.single.fetchedAt, fetchedAt);
+  });
+
+  test('image metadata parses gallery title and tags', () {
+    final metadata = ImageMetadata.fromJson({
+      'id': 166062,
+      'width': 1200,
+      'height': 2133,
+      'orientation': 'portrait',
+      'sort_order': 43,
+      'gallery': {
+        'id': 2882,
+        'title': 'Coser@miko酱ww – 2025年04月订阅 Part01 (54P)',
+        'category': 'Cosplay',
+      },
+      'tags': [
+        '2025年04月订阅',
+        'Coser@miko酱ww - 2025年04月订阅',
+        'Miko Miko Ww',
+        'miko酱ww',
+      ],
+    });
+
+    expect(metadata.gallery?.title, contains('2025年04月订阅'));
+    expect(metadata.gallery?.category, 'Cosplay');
+    expect(metadata.tags, contains('miko酱ww'));
   });
 }

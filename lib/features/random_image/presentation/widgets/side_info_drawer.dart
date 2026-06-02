@@ -14,6 +14,8 @@ class SideInfoDrawer extends StatelessWidget {
     required this.onAddTag,
     required this.onDeleteTag,
     required this.onOpenHistory,
+    required this.onLoadMetadata,
+    required this.onMetadataTagSelected,
     super.key,
   });
 
@@ -23,6 +25,8 @@ class SideInfoDrawer extends StatelessWidget {
   final VoidCallback onAddTag;
   final ValueChanged<String> onDeleteTag;
   final VoidCallback onOpenHistory;
+  final VoidCallback onLoadMetadata;
+  final ValueChanged<String> onMetadataTagSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +84,44 @@ class SideInfoDrawer extends StatelessWidget {
             _InfoRow(label: 'Gallery ID', value: image?.galleryId?.toString()),
             _InfoRow(label: 'Content-Type', value: image?.contentType),
             _InfoRow(label: '获取时间', value: _formatTime(image?.fetchedAt)),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: image?.imageId == null ||
+                        state.isMetadataLoading ||
+                        state.currentMetadata?.id == image?.imageId
+                    ? null
+                    : onLoadMetadata,
+                icon: state.isMetadataLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.info_outline_rounded),
+                label: Text(
+                  state.currentMetadata == null ? '获取图集信息' : '已获取图集信息',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: niceText,
+                  disabledForegroundColor: niceMuted,
+                  side: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.16),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+            if (state.currentMetadata != null) ...[
+              const SizedBox(height: 14),
+              _MetadataPanel(
+                state: state,
+                onTagSelected: onMetadataTagSelected,
+              ),
+            ],
             if (state.isPreloading) ...[
               const SizedBox(height: 16),
               const LinearProgressIndicator(minHeight: 2),
@@ -96,6 +138,116 @@ class SideInfoDrawer extends StatelessWidget {
     }
     String two(int number) => number.toString().padLeft(2, '0');
     return '${two(value.hour)}:${two(value.minute)}:${two(value.second)}';
+  }
+}
+
+class _MetadataPanel extends StatelessWidget {
+  const _MetadataPanel({
+    required this.state,
+    required this.onTagSelected,
+  });
+
+  final RandomImageViewState state;
+  final ValueChanged<String> onTagSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final metadata = state.currentMetadata!;
+    final gallery = metadata.gallery;
+    final title = gallery?.title;
+    final category = gallery?.category;
+    final tags = metadata.tags;
+    final knownTags =
+        state.userTags.map((tag) => tag.toLowerCase()).toSet(growable: false);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _InfoRow(label: '图包名称', value: title),
+          _InfoRow(label: '分类', value: category),
+          _InfoRow(
+            label: '尺寸',
+            value:
+                '${metadata.width} x ${metadata.height} · ${metadata.orientation ?? '-'}',
+          ),
+          if (tags.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Text(
+              '相关标签',
+              style: TextStyle(color: niceMuted, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final maxChipWidth =
+                    (constraints.maxWidth - 48).clamp(140.0, 220.0).toDouble();
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final tag in tags)
+                      _MetadataTagChip(
+                        tag: tag,
+                        isKnown: knownTags.contains(tag.toLowerCase()),
+                        maxWidth: maxChipWidth,
+                        onSelected: () => onTagSelected(tag),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MetadataTagChip extends StatelessWidget {
+  const _MetadataTagChip({
+    required this.tag,
+    required this.isKnown,
+    required this.maxWidth,
+    required this.onSelected,
+  });
+
+  final String tag;
+  final bool isKnown;
+  final double maxWidth;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      avatar: isKnown
+          ? const Icon(Icons.check_rounded, size: 16, color: niceAmber)
+          : const Icon(Icons.add_rounded, size: 16, color: niceMuted),
+      label: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: Text(
+          tag,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      onPressed: onSelected,
+      backgroundColor: Colors.white.withValues(alpha: 0.08),
+      side: BorderSide(
+        color: isKnown ? niceAmber : Colors.white.withValues(alpha: 0.12),
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      labelStyle: TextStyle(
+        color: isKnown ? niceText : niceMuted,
+        fontSize: 12,
+        fontWeight: isKnown ? FontWeight.w700 : FontWeight.w500,
+      ),
+    );
   }
 }
 
