@@ -432,6 +432,69 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     await switchTag(effectiveTag);
   }
 
+  Future<void> openImageById(int imageId) async {
+    if (imageId <= 0) {
+      state = state.copyWith(errorMessage: 'Image ID 必须大于 0');
+      return;
+    }
+    if (state.isInitialLoading ||
+        state.isNextLoading ||
+        state.adjacentLoadingDelta != null) {
+      return;
+    }
+    if (!_readQuotaState().canAcquire) {
+      state = state.copyWith(errorMessage: _quotaRecoveryMessage());
+      return;
+    }
+
+    final generation = ++_generation;
+    state = state.copyWith(
+      isNextLoading: true,
+      currentMetadata: null,
+      adjacentLoadingDelta: null,
+      previousAdjacentQueue: const [],
+      nextAdjacentQueue: const [],
+      preloadQueue: const [],
+      isImageZoomed: false,
+      isMetadataLoading: false,
+      errorMessage: null,
+      lastLoadError: null,
+    );
+    await _historyStore.clearPreloadQueue();
+
+    try {
+      final image = await _repository.fetchImageById(
+        imageId,
+        sourceTag: state.selectedTag,
+      );
+      if (!mounted || generation != _generation) {
+        return;
+      }
+      _rememberImageId(image.imageId);
+      _rememberLocalImage(image);
+      final historyImages = await _historyStore.upsertFromRandomImage(image);
+      if (!mounted || generation != _generation) {
+        return;
+      }
+      state = state.copyWith(
+        currentImage: image,
+        historyImages: historyImages,
+        isNextLoading: false,
+        lastLoadError: null,
+      );
+    } catch (error) {
+      if (!mounted || generation != _generation) {
+        return;
+      }
+      final message = _messageForError(error);
+      state = state.copyWith(
+        isNextLoading: false,
+        errorMessage: message,
+        lastLoadError: message,
+      );
+    }
+  }
+
   Future<void> toggleCurrentFavorite() async {
     final image = state.currentImage;
     final imageId = image?.imageId;

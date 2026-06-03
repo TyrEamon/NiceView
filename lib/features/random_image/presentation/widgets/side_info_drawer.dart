@@ -11,6 +11,7 @@ class SideInfoDrawer extends StatelessWidget {
     required this.state,
     required this.quota,
     required this.onTagSelected,
+    required this.onOpenImageById,
     required this.onAddTag,
     required this.onOpenTagLibrary,
     required this.onDeleteTag,
@@ -25,6 +26,7 @@ class SideInfoDrawer extends StatelessWidget {
   final RandomImageViewState state;
   final QuotaState quota;
   final ValueChanged<String?> onTagSelected;
+  final ValueChanged<int> onOpenImageById;
   final VoidCallback onAddTag;
   final VoidCallback onOpenTagLibrary;
   final ValueChanged<String> onDeleteTag;
@@ -49,6 +51,14 @@ class SideInfoDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             QuotaBar(quota: quota),
+            const SizedBox(height: 18),
+            _ImageIdOpener(
+              enabled: quota.canAcquire &&
+                  !state.isInitialLoading &&
+                  !state.isNextLoading &&
+                  state.adjacentLoadingDelta == null,
+              onOpen: onOpenImageById,
+            ),
             const SizedBox(height: 26),
             const _SectionLabel('标签'),
             const SizedBox(height: 10),
@@ -247,6 +257,96 @@ class _MetadataPanel extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _ImageIdOpener extends StatefulWidget {
+  const _ImageIdOpener({
+    required this.enabled,
+    required this.onOpen,
+  });
+
+  final bool enabled;
+  final ValueChanged<int> onOpen;
+
+  @override
+  State<_ImageIdOpener> createState() => _ImageIdOpenerState();
+}
+
+class _ImageIdOpenerState extends State<_ImageIdOpener> {
+  late final TextEditingController _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _controller,
+            enabled: widget.enabled,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.go,
+            style: const TextStyle(color: niceText, fontSize: 13),
+            decoration: InputDecoration(
+              labelText: 'Image ID',
+              hintText: '输入 ID',
+              errorText: _error,
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.07),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _submit(),
+          ),
+        ),
+        const SizedBox(width: 10),
+        SizedBox.square(
+          dimension: 48,
+          child: IconButton.filled(
+            tooltip: '打开 Image ID',
+            onPressed: widget.enabled ? _submit : null,
+            icon: const Icon(Icons.arrow_forward_rounded),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.10),
+              foregroundColor: niceText,
+              disabledBackgroundColor: Colors.white.withValues(alpha: 0.05),
+              disabledForegroundColor: niceMuted,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _submit() {
+    final raw = _controller.text.trim();
+    final id = int.tryParse(raw);
+    if (id == null || id <= 0) {
+      setState(() => _error = '请输入有效 ID');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() => _error = null);
+    widget.onOpen(id);
   }
 }
 

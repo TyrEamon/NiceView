@@ -219,6 +219,10 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                           _closeDrawer();
                           controller.switchTag(tag);
                         },
+                        onOpenImageById: (imageId) {
+                          _closeDrawer();
+                          unawaited(controller.openImageById(imageId));
+                        },
                         onAddTag: _showAddTagSheet,
                         onOpenTagLibrary: _openTagLibrary,
                         onDeleteTag: (tag) => _confirmDeleteTag(tag),
