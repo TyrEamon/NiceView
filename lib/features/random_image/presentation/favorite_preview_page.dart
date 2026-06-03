@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
+import '../../../app/top_snack_bar.dart';
 import '../../../services/app_exceptions.dart';
 import '../../../services/download_service.dart';
 import '../data/random_image_repository.dart';
@@ -283,16 +284,12 @@ class _FavoritePreviewPageState extends ConsumerState<FavoritePreviewPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已保存到系统相册')),
-      );
+      showTopSnackBar(context, '已保存到系统相册');
     } catch (error) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_messageForError(error))),
-      );
+      showTopSnackBar(context, _messageForError(error));
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);

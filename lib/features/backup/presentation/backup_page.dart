@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
+import '../../../app/top_snack_bar.dart';
 import '../../random_image/presentation/random_image_controller.dart';
 
 class BackupPage extends ConsumerStatefulWidget {
@@ -62,9 +63,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('备份已保存：$target')),
-      );
+      showTopSnackBar(context, '备份已保存：$target');
     } catch (error) {
       _showError(error);
     } finally {
@@ -106,13 +105,10 @@ class _BackupPageState extends ConsumerState<BackupPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '导入完成：收藏 ${summary.favoriteCount} 张'
-            '（新增 ${summary.addedFavoriteCount} 张）',
-          ),
-        ),
+      showTopSnackBar(
+        context,
+        '导入完成：收藏 ${summary.favoriteCount} 张'
+        '（新增 ${summary.addedFavoriteCount} 张）',
       );
     } catch (error) {
       _showError(error);
@@ -127,9 +123,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error.toString())),
-    );
+    showTopSnackBar(context, error.toString());
   }
 }
 

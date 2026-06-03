@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
+import '../../../app/top_snack_bar.dart';
 import '../../../services/download_service.dart';
 import '../domain/history_image.dart';
 import '../domain/random_image.dart';
@@ -143,16 +144,12 @@ class _HistoryPreviewPageState extends ConsumerState<HistoryPreviewPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已保存到系统相册')),
-      );
+      showTopSnackBar(context, '已保存到系统相册');
     } catch (_) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('保存失败，图片可能已经不在本机了')),
-      );
+      showTopSnackBar(context, '保存失败，图片可能已经不在本机了');
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
+import '../../../app/top_snack_bar.dart';
 import '../domain/history_image.dart';
 import 'history_preview_page.dart';
 import 'random_image_controller.dart';
@@ -20,9 +21,7 @@ class HistoryPage extends ConsumerWidget {
         if (next == null) {
           return;
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next)),
-        );
+        showTopSnackBar(context, next);
         ref.read(randomImageControllerProvider.notifier).clearMessage();
       },
     );

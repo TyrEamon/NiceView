@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
+import '../../../app/top_snack_bar.dart';
 import '../../../services/quota_service.dart';
 import '../../backup/presentation/backup_page.dart';
 import '../../tags/presentation/tag_library_page.dart';
@@ -53,9 +54,7 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
         if (next == null) {
           return;
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(next)),
-        );
+        showTopSnackBar(context, next);
         ref.read(randomImageControllerProvider.notifier).clearMessage();
       },
     );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
+import '../../../app/top_snack_bar.dart';
 import '../data/tag_library_repository.dart';
 import '../domain/tag_info.dart';
 
@@ -271,9 +272,7 @@ class _TagLibraryPageState extends ConsumerState<TagLibraryPage> {
         _isRefreshing = false;
         _errorMessage = _messageForError(error);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_errorMessage!)),
-      );
+      showTopSnackBar(context, _errorMessage!);
     }
   }
 
