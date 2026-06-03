@@ -368,7 +368,13 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
           state.currentImage?.imageId != imageId) {
         return;
       }
+      final galleryId = metadata.gallery?.id;
+      final currentImage = state.currentImage;
+      final imageWithMetadata = galleryId == null || currentImage == null
+          ? currentImage
+          : currentImage.copyWith(galleryId: galleryId);
       state = state.copyWith(
+        currentImage: imageWithMetadata,
         currentMetadata: metadata,
         isMetadataLoading: false,
       );
