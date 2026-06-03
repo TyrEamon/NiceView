@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
 import '../../../services/quota_service.dart';
+import '../../backup/presentation/backup_page.dart';
 import '../../tags/presentation/tag_library_page.dart';
 import 'favorites_page.dart';
 import 'history_page.dart';
@@ -223,6 +224,7 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                         onDeleteTag: (tag) => _confirmDeleteTag(tag),
                         onOpenHistory: _openHistory,
                         onOpenFavorites: _openFavorites,
+                        onOpenBackup: _openBackup,
                         onLoadMetadata: () {
                           unawaited(controller.loadCurrentMetadata());
                         },
@@ -361,6 +363,13 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
     _closeDrawer();
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const FavoritesPage()),
+    );
+  }
+
+  Future<void> _openBackup() async {
+    _closeDrawer();
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const BackupPage()),
     );
   }
 

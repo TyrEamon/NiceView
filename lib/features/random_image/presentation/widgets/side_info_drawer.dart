@@ -16,6 +16,7 @@ class SideInfoDrawer extends StatelessWidget {
     required this.onDeleteTag,
     required this.onOpenHistory,
     required this.onOpenFavorites,
+    required this.onOpenBackup,
     required this.onLoadMetadata,
     required this.onMetadataTagSelected,
     super.key,
@@ -29,6 +30,7 @@ class SideInfoDrawer extends StatelessWidget {
   final ValueChanged<String> onDeleteTag;
   final VoidCallback onOpenHistory;
   final VoidCallback onOpenFavorites;
+  final VoidCallback onOpenBackup;
   final VoidCallback onLoadMetadata;
   final ValueChanged<String> onMetadataTagSelected;
 
@@ -100,6 +102,16 @@ class SideInfoDrawer extends StatelessWidget {
               subtitle: Text('${state.favoriteImages.length} 张'),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: onOpenFavorites,
+              textColor: niceText,
+              iconColor: niceMuted,
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.backup_rounded, color: niceMuted),
+              title: const Text('数据备份'),
+              subtitle: const Text('导出 / 导入收藏夹'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: onOpenBackup,
               textColor: niceText,
               iconColor: niceMuted,
             ),

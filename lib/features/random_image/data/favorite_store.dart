@@ -40,6 +40,26 @@ class FavoriteStore {
     return images;
   }
 
+  Future<List<FavoriteImage>> merge(List<FavoriteImage> incoming) async {
+    final images = await load();
+    final byId = <int, FavoriteImage>{
+      for (final image in images) image.imageId: image,
+    };
+    for (final image in incoming) {
+      final existing = byId[image.imageId];
+      if (existing == null ||
+          image.favoritedAt.isAfter(existing.favoritedAt) ||
+          (!existing.metadataLoaded && image.metadataLoaded)) {
+        byId[image.imageId] = image;
+      }
+    }
+
+    final merged = byId.values.toList()
+      ..sort((a, b) => b.favoritedAt.compareTo(a.favoritedAt));
+    await _save(merged);
+    return merged;
+  }
+
   Future<void> _save(List<FavoriteImage> images) async {
     await _preferences.setString(
       _favoritesKey,

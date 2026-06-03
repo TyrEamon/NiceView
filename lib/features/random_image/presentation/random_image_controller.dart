@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/app_exceptions.dart';
 import '../../../services/download_service.dart';
 import '../../../services/quota_service.dart';
+import '../../backup/data/backup_service.dart';
 import '../../tags/data/local_tag_store.dart';
 import '../data/favorite_store.dart';
 import '../data/history_store.dart';
@@ -25,6 +26,7 @@ final randomImageControllerProvider =
     tagStore: ref.watch(localTagStoreProvider),
     favoriteStore: ref.watch(favoriteStoreProvider),
     historyStore: ref.watch(historyStoreProvider),
+    backupService: ref.watch(backupServiceProvider),
     downloadService: ref.watch(downloadServiceProvider),
     quotaController: ref.read(quotaControllerProvider.notifier),
     readQuotaState: () => ref.read(quotaControllerProvider),
@@ -178,6 +180,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     required LocalTagStore tagStore,
     required FavoriteStore favoriteStore,
     required HistoryStore historyStore,
+    required BackupService backupService,
     required DownloadService downloadService,
     required QuotaController quotaController,
     required QuotaState Function() readQuotaState,
@@ -185,6 +188,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         _tagStore = tagStore,
         _favoriteStore = favoriteStore,
         _historyStore = historyStore,
+        _backupService = backupService,
         _downloadService = downloadService,
         _quotaController = quotaController,
         _readQuotaState = readQuotaState,
@@ -194,6 +198,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
   final LocalTagStore _tagStore;
   final FavoriteStore _favoriteStore;
   final HistoryStore _historyStore;
+  final BackupService _backupService;
   final DownloadService _downloadService;
   final QuotaController _quotaController;
   final QuotaState Function() _readQuotaState;
@@ -535,6 +540,35 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         state = state.copyWith(errorMessage: _messageForError(error));
       }
     }
+  }
+
+  Future<String> exportBackup() {
+    return _backupService.exportBackup(
+      favorites: state.favoriteImages,
+    );
+  }
+
+  Future<BackupImportSummary> importBackup() async {
+    final payload = await _backupService.importBackup();
+    final previousFavoriteCount = state.favoriteImages.length;
+
+    final mergedFavorites = await _favoriteStore.merge(payload.favorites);
+    if (!mounted) {
+      return BackupImportSummary(
+        favoriteCount: mergedFavorites.length,
+        addedFavoriteCount: 0,
+      );
+    }
+
+    state = state.copyWith(
+      favoriteImages: mergedFavorites,
+      errorMessage: '备份导入完成',
+    );
+    final addedFavoriteCount = mergedFavorites.length - previousFavoriteCount;
+    return BackupImportSummary(
+      favoriteCount: mergedFavorites.length,
+      addedFavoriteCount: addedFavoriteCount < 0 ? 0 : addedFavoriteCount,
+    );
   }
 
   Future<void> openAdjacentImage(int delta) async {
@@ -1317,4 +1351,14 @@ class _BrowseMode {
   final int exhaustions;
   final bool isFast;
   final int target;
+}
+
+class BackupImportSummary {
+  const BackupImportSummary({
+    required this.favoriteCount,
+    required this.addedFavoriteCount,
+  });
+
+  final int favoriteCount;
+  final int addedFavoriteCount;
 }
