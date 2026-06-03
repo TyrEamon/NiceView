@@ -118,9 +118,8 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                           children: [
                             ImageStage(
                               image: state.currentImage,
-                              isLoading: state.isInitialLoading ||
-                                  state.isNextLoading ||
-                                  isAdjacentLoading,
+                              isLoading:
+                                  state.isInitialLoading || state.isNextLoading,
                               errorMessage: state.lastLoadError,
                               onRetry: controller.retryCurrent,
                               onSwipeLeft: () {

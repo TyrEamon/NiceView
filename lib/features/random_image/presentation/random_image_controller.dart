@@ -408,6 +408,43 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     }
 
     final generation = _generation;
+    final knownGalleryId =
+        state.currentMetadata?.gallery?.id ?? state.currentImage?.galleryId;
+    if (knownGalleryId != null) {
+      final cachedTarget = await _cachedHistoryImage(
+        targetId,
+        galleryId: knownGalleryId,
+      );
+      if (!mounted ||
+          generation != _generation ||
+          state.currentImage?.imageId != imageId) {
+        return;
+      }
+      if (cachedTarget != null) {
+        _rememberImageId(cachedTarget.imageId);
+        final historyImages = await _historyStore.touch(cachedTarget);
+        if (!mounted ||
+            generation != _generation ||
+            state.currentImage?.imageId != imageId) {
+          return;
+        }
+        final displayedHistory = historyImages.firstWhere(
+          (item) => item.historyId == cachedTarget.historyId,
+          orElse: () => cachedTarget,
+        );
+        state = state.copyWith(
+          currentImage: _randomImageFromHistory(displayedHistory),
+          currentMetadata: null,
+          historyImages: historyImages,
+          adjacentLoadingDelta: null,
+          isImageZoomed: false,
+          errorMessage: null,
+          lastLoadError: null,
+        );
+        return;
+      }
+    }
+
     state = state.copyWith(
       adjacentLoadingDelta: delta,
       errorMessage: null,
@@ -452,20 +489,11 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
           state.currentImage?.imageId != imageId) {
         return;
       }
-      _rememberImageId(image.imageId);
-      final historyImages = await _historyStore.upsertFromRandomImage(image);
-      if (!mounted ||
-          generation != _generation ||
-          state.currentImage?.imageId != imageId) {
-        return;
-      }
-      state = state.copyWith(
-        currentImage: image,
-        currentMetadata: metadata,
-        historyImages: historyImages,
-        adjacentLoadingDelta: null,
-        isImageZoomed: false,
-        lastLoadError: null,
+      await _showAdjacentImage(
+        image,
+        metadata: metadata,
+        generation: generation,
+        previousImageId: imageId,
       );
     } catch (error) {
       if (mounted &&
@@ -477,6 +505,44 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         );
       }
     }
+  }
+
+  Future<HistoryImage?> _cachedHistoryImage(
+    int imageId, {
+    required int galleryId,
+  }) async {
+    for (final image in state.historyImages) {
+      if (image.imageId != imageId || image.galleryId != galleryId) {
+        continue;
+      }
+      if (await image.file.exists()) {
+        return image;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _showAdjacentImage(
+    RandomImage image, {
+    required ImageMetadata? metadata,
+    required int generation,
+    required int previousImageId,
+  }) async {
+    _rememberImageId(image.imageId);
+    final historyImages = await _historyStore.upsertFromRandomImage(image);
+    if (!mounted ||
+        generation != _generation ||
+        state.currentImage?.imageId != previousImageId) {
+      return;
+    }
+    state = state.copyWith(
+      currentImage: image,
+      currentMetadata: metadata,
+      historyImages: historyImages,
+      adjacentLoadingDelta: null,
+      isImageZoomed: false,
+      lastLoadError: null,
+    );
   }
 
   Future<bool> addTag(String value) async {
