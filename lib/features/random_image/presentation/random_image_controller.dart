@@ -32,6 +32,8 @@ final randomImageControllerProvider =
 
 const _unset = Object();
 const _defaultPreloadTarget = 6;
+const _adjacentPreloadTarget = 4;
+const _recentLocalImageLimit = 48;
 
 class RandomImageViewState {
   const RandomImageViewState({
@@ -50,8 +52,8 @@ class RandomImageViewState {
     this.currentImage,
     this.currentMetadata,
     this.adjacentLoadingDelta,
-    this.previousAdjacentImage,
-    this.nextAdjacentImage,
+    this.previousAdjacentQueue = const [],
+    this.nextAdjacentQueue = const [],
     this.selectedTag,
     this.errorMessage,
     this.lastLoadError,
@@ -77,8 +79,8 @@ class RandomImageViewState {
   final RandomImage? currentImage;
   final ImageMetadata? currentMetadata;
   final int? adjacentLoadingDelta;
-  final RandomImage? previousAdjacentImage;
-  final RandomImage? nextAdjacentImage;
+  final List<RandomImage> previousAdjacentQueue;
+  final List<RandomImage> nextAdjacentQueue;
   final List<RandomImage> preloadQueue;
   final List<HistoryImage> historyImages;
   final int preloadTarget;
@@ -99,8 +101,8 @@ class RandomImageViewState {
     Object? currentImage = _unset,
     Object? currentMetadata = _unset,
     Object? adjacentLoadingDelta = _unset,
-    Object? previousAdjacentImage = _unset,
-    Object? nextAdjacentImage = _unset,
+    List<RandomImage>? previousAdjacentQueue,
+    List<RandomImage>? nextAdjacentQueue,
     List<RandomImage>? preloadQueue,
     List<HistoryImage>? historyImages,
     int? preloadTarget,
@@ -127,12 +129,9 @@ class RandomImageViewState {
       adjacentLoadingDelta: identical(adjacentLoadingDelta, _unset)
           ? this.adjacentLoadingDelta
           : adjacentLoadingDelta as int?,
-      previousAdjacentImage: identical(previousAdjacentImage, _unset)
-          ? this.previousAdjacentImage
-          : previousAdjacentImage as RandomImage?,
-      nextAdjacentImage: identical(nextAdjacentImage, _unset)
-          ? this.nextAdjacentImage
-          : nextAdjacentImage as RandomImage?,
+      previousAdjacentQueue:
+          previousAdjacentQueue ?? this.previousAdjacentQueue,
+      nextAdjacentQueue: nextAdjacentQueue ?? this.nextAdjacentQueue,
       preloadQueue: preloadQueue ?? this.preloadQueue,
       historyImages: historyImages ?? this.historyImages,
       preloadTarget: preloadTarget ?? this.preloadTarget,
@@ -182,6 +181,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
   final QuotaController _quotaController;
   final QuotaState Function() _readQuotaState;
   final ListQueue<int> _recentImageIds = ListQueue<int>();
+  final Map<int, RandomImage> _recentLocalImagesById = <int, RandomImage>{};
   final Set<String> _pendingConsumedPreloadPaths = <String>{};
 
   bool _initialized = false;
@@ -234,9 +234,11 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     }
     if (restoredImage != null) {
       _rememberImageId(restoredImage.imageId);
+      _rememberLocalImage(restoredImage);
     }
     for (final image in preloadQueue) {
       _rememberImageId(image.imageId);
+      _rememberLocalImage(image);
     }
     state = state.copyWith(
       currentImage: restoredImage,
@@ -251,7 +253,6 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     if (restoredImage == null) {
       await _loadFreshCurrent(isInitial: true);
     } else {
-      unawaited(_fillAdjacentPreloads(_generation, restoredImage));
       unawaited(_fillPreloadQueue(_generation));
     }
   }
@@ -280,12 +281,14 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
       final generation = _generation;
       final selectedTag = state.selectedTag;
       _pendingConsumedPreloadPaths.add(next.localFilePath);
+      _rememberImageId(next.imageId);
+      _rememberLocalImage(next);
       state = state.copyWith(
         currentImage: next,
         currentMetadata: null,
         adjacentLoadingDelta: null,
-        previousAdjacentImage: null,
-        nextAdjacentImage: null,
+        previousAdjacentQueue: const [],
+        nextAdjacentQueue: const [],
         preloadQueue: queue,
         isImageZoomed: false,
         isMetadataLoading: false,
@@ -298,7 +301,6 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         generation: generation,
         selectedTag: selectedTag,
       ));
-      unawaited(_fillAdjacentPreloads(generation, next));
       unawaited(_fillPreloadQueue(_generation));
       return;
     }
@@ -333,8 +335,8 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
       selectedTag: effectiveTag,
       currentMetadata: null,
       adjacentLoadingDelta: null,
-      previousAdjacentImage: null,
-      nextAdjacentImage: null,
+      previousAdjacentQueue: const [],
+      nextAdjacentQueue: const [],
       preloadQueue: const [],
       preloadTarget: _defaultPreloadTarget,
       isFastBrowseMode: false,
@@ -415,11 +417,6 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         state.adjacentLoadingDelta != null) {
       return;
     }
-    if (_readQuotaState().isServerLocked) {
-      state = state.copyWith(errorMessage: '歇 60 秒，让服务器也喝口水。');
-      return;
-    }
-
     final targetId = imageId + delta;
     if (targetId <= 0) {
       state = state.copyWith(errorMessage: '已经到头了');
@@ -427,14 +424,19 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     }
 
     final generation = _generation;
-    final preloaded = delta < 0
-        ? state.previousAdjacentImage
-        : state.nextAdjacentImage;
-    if (preloaded?.imageId == targetId && await preloaded!.file.exists()) {
+    final queue = delta < 0
+        ? [...state.previousAdjacentQueue]
+        : [...state.nextAdjacentQueue];
+    if (queue.isNotEmpty &&
+        queue.first.imageId == targetId &&
+        await queue.first.file.exists()) {
+      final image = queue.removeAt(0);
       _showAdjacentImage(
-        preloaded,
+        image,
         generation: generation,
         previousImageId: imageId,
+        nextQueue: delta > 0 ? queue : null,
+        previousQueue: delta < 0 ? queue : null,
       );
       return;
     }
@@ -447,6 +449,8 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     }
     if (cachedTarget != null) {
       _rememberImageId(cachedTarget.imageId);
+      final image = _randomImageFromHistory(cachedTarget);
+      _rememberLocalImage(image);
       final historyImages = await _historyStore.touch(cachedTarget);
       if (!mounted ||
           generation != _generation ||
@@ -457,19 +461,37 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         (item) => item.historyId == cachedTarget.historyId,
         orElse: () => cachedTarget,
       );
-      final image = _randomImageFromHistory(displayedHistory);
+      final displayedImage = _randomImageFromHistory(displayedHistory);
+      _rememberLocalImage(displayedImage);
       state = state.copyWith(
-        currentImage: image,
+        currentImage: displayedImage,
         currentMetadata: null,
-        previousAdjacentImage: null,
-        nextAdjacentImage: null,
         historyImages: historyImages,
         adjacentLoadingDelta: null,
         isImageZoomed: false,
         errorMessage: null,
         lastLoadError: null,
       );
-      unawaited(_fillAdjacentPreloads(generation, image));
+      return;
+    }
+
+    final rememberedTarget = await _cachedRememberedImage(targetId);
+    if (!mounted ||
+        generation != _generation ||
+        state.currentImage?.imageId != imageId) {
+      return;
+    }
+    if (rememberedTarget != null) {
+      _showAdjacentImage(
+        rememberedTarget,
+        generation: generation,
+        previousImageId: imageId,
+      );
+      return;
+    }
+
+    if (_readQuotaState().isServerLocked) {
+      state = state.copyWith(errorMessage: '歇 60 秒，让服务器也喝口水。');
       return;
     }
 
@@ -480,8 +502,9 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     );
 
     try {
-      final image = await _repository.fetchImageById(
-        targetId,
+      final images = await _loadAdjacentBatch(
+        startImageId: targetId,
+        delta: delta,
         sourceTag: current.sourceTag,
       );
       if (!mounted ||
@@ -489,10 +512,21 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
           state.currentImage?.imageId != imageId) {
         return;
       }
+      if (images.isEmpty) {
+        state = state.copyWith(
+          adjacentLoadingDelta: null,
+          errorMessage: '没有更多相邻图片了',
+        );
+        return;
+      }
+      final image = images.first;
+      final remaining = images.skip(1).toList();
       _showAdjacentImage(
         image,
         generation: generation,
         previousImageId: imageId,
+        nextQueue: delta > 0 ? remaining : null,
+        previousQueue: delta < 0 ? remaining : null,
       );
     } catch (error) {
       if (mounted &&
@@ -524,8 +558,11 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     RandomImage image, {
     required int generation,
     required int previousImageId,
+    List<RandomImage>? nextQueue,
+    List<RandomImage>? previousQueue,
   }) {
     _rememberImageId(image.imageId);
+    _rememberLocalImage(image);
     if (!mounted ||
         generation != _generation ||
         state.currentImage?.imageId != previousImageId) {
@@ -534,78 +571,67 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     state = state.copyWith(
       currentImage: image,
       currentMetadata: null,
-      previousAdjacentImage: null,
-      nextAdjacentImage: null,
+      nextAdjacentQueue: nextQueue,
+      previousAdjacentQueue: previousQueue,
       adjacentLoadingDelta: null,
       isImageZoomed: false,
       errorMessage: null,
       lastLoadError: null,
     );
     unawaited(_persistDisplayedAdjacentImage(image, generation: generation));
-    unawaited(_fillAdjacentPreloads(generation, image));
   }
 
-  Future<void> _fillAdjacentPreloads(
-    int generation,
-    RandomImage center,
-  ) async {
-    final centerId = center.imageId;
-    if (_isPreloadingAdjacent ||
-        centerId == null ||
-        _readQuotaState().isServerLocked) {
-      return;
+  Future<List<RandomImage>> _loadAdjacentBatch({
+    required int startImageId,
+    required int delta,
+    required String? sourceTag,
+  }) async {
+    if (_isPreloadingAdjacent) {
+      return const <RandomImage>[];
     }
 
     _isPreloadingAdjacent = true;
+    final images = <RandomImage>[];
     try {
-      final next = await _loadAdjacentCandidate(
-        centerId + 1,
-        sourceTag: center.sourceTag,
-      );
-      if (!mounted ||
-          generation != _generation ||
-          state.currentImage?.imageId != centerId) {
-        return;
-      }
+      for (var offset = 0; offset < _adjacentPreloadTarget; offset += 1) {
+        final imageId = startImageId + delta * offset;
+        if (imageId <= 0) {
+          break;
+        }
 
-      final previous = centerId > 1
-          ? await _loadAdjacentCandidate(
-              centerId - 1,
-              sourceTag: center.sourceTag,
-            )
-          : null;
-      if (!mounted ||
-          generation != _generation ||
-          state.currentImage?.imageId != centerId) {
-        return;
-      }
+        final cached = await _cachedHistoryImage(imageId);
+        if (cached != null) {
+          final image = _randomImageFromHistory(cached);
+          _rememberLocalImage(image);
+          images.add(image);
+          continue;
+        }
 
-      state = state.copyWith(
-        nextAdjacentImage: next,
-        previousAdjacentImage: previous,
-      );
+        final remembered = await _cachedRememberedImage(imageId);
+        if (remembered != null) {
+          images.add(remembered);
+          continue;
+        }
+        if (!_readQuotaState().canAcquire) {
+          break;
+        }
+
+        try {
+          images.add(
+            await _repository.fetchImageById(imageId, sourceTag: sourceTag),
+          );
+        } on ImageNotFoundException {
+          break;
+        } on NiceViewException {
+          if (images.isEmpty) {
+            rethrow;
+          }
+          break;
+        }
+      }
+      return images;
     } finally {
       _isPreloadingAdjacent = false;
-    }
-  }
-
-  Future<RandomImage?> _loadAdjacentCandidate(
-    int imageId, {
-    required String? sourceTag,
-  }) async {
-    final cached = await _cachedHistoryImage(imageId);
-    if (cached != null) {
-      return _randomImageFromHistory(cached);
-    }
-    if (!_readQuotaState().canAcquire) {
-      return null;
-    }
-    try {
-      return await _repository.fetchImageById(imageId, sourceTag: sourceTag);
-    } on ImageNotFoundException {
-      return null;
-    } on NiceViewException {
-      return null;
     }
   }
 
@@ -634,8 +660,10 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
           viewedAt: DateTime.now(),
         ),
       );
+      final displayedImage = _randomImageFromHistory(historyImage);
+      _rememberLocalImage(displayedImage);
       state = state.copyWith(
-        currentImage: _randomImageFromHistory(historyImage),
+        currentImage: displayedImage,
         historyImages: historyImages,
       );
     } catch (error) {
@@ -797,8 +825,8 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
       isNextLoading: !isInitial || state.currentImage != null,
       currentMetadata: null,
       adjacentLoadingDelta: null,
-      previousAdjacentImage: null,
-      nextAdjacentImage: null,
+      previousAdjacentQueue: const [],
+      nextAdjacentQueue: const [],
       isMetadataLoading: false,
       errorMessage: null,
       lastLoadError: null,
@@ -811,6 +839,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         return;
       }
       _rememberImageId(image.imageId);
+      _rememberLocalImage(image);
       final historyImages = await _historyStore.upsertFromRandomImage(image);
       if (!mounted || generation != _generation) {
         return;
@@ -819,8 +848,8 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         currentImage: image,
         currentMetadata: null,
         adjacentLoadingDelta: null,
-        previousAdjacentImage: null,
-        nextAdjacentImage: null,
+        previousAdjacentQueue: const [],
+        nextAdjacentQueue: const [],
         historyImages: historyImages,
         isInitialLoading: false,
         isNextLoading: false,
@@ -831,7 +860,6 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         'load success generation=$generation imageId=${image.imageId} '
         'path=${image.localFilePath}',
       );
-      unawaited(_fillAdjacentPreloads(generation, image));
       unawaited(_fillPreloadQueue(generation));
     } catch (error) {
       if (!mounted || generation != _generation) {
@@ -888,6 +916,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
       final currentImage = historyImages.isEmpty
           ? image
           : _randomImageFromHistory(historyImages.first);
+      _rememberLocalImage(currentImage);
       _pendingConsumedPreloadPaths.remove(image.localFilePath);
       final displayedImage = state.currentImage;
       state = displayedImage != null && _isSameImage(displayedImage, image)
@@ -1070,6 +1099,30 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     while (_recentImageIds.length > 20) {
       _recentImageIds.removeFirst();
     }
+  }
+
+  void _rememberLocalImage(RandomImage image) {
+    final imageId = image.imageId;
+    if (imageId == null) {
+      return;
+    }
+    _recentLocalImagesById.remove(imageId);
+    _recentLocalImagesById[imageId] = image;
+    while (_recentLocalImagesById.length > _recentLocalImageLimit) {
+      _recentLocalImagesById.remove(_recentLocalImagesById.keys.first);
+    }
+  }
+
+  Future<RandomImage?> _cachedRememberedImage(int imageId) async {
+    final image = _recentLocalImagesById[imageId];
+    if (image == null) {
+      return null;
+    }
+    if (await image.file.exists()) {
+      return image;
+    }
+    _recentLocalImagesById.remove(imageId);
+    return null;
   }
 
   String _quotaRecoveryMessage() {
