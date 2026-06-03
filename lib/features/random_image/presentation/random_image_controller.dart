@@ -9,8 +9,10 @@ import '../../../services/app_exceptions.dart';
 import '../../../services/download_service.dart';
 import '../../../services/quota_service.dart';
 import '../../tags/data/local_tag_store.dart';
+import '../data/favorite_store.dart';
 import '../data/history_store.dart';
 import '../data/random_image_repository.dart';
+import '../domain/favorite_image.dart';
 import '../domain/history_image.dart';
 import '../domain/image_metadata.dart';
 import '../domain/quota_state.dart';
@@ -21,6 +23,7 @@ final randomImageControllerProvider =
   final controller = RandomImageController(
     repository: ref.watch(randomImageRepositoryProvider),
     tagStore: ref.watch(localTagStoreProvider),
+    favoriteStore: ref.watch(favoriteStoreProvider),
     historyStore: ref.watch(historyStoreProvider),
     downloadService: ref.watch(downloadServiceProvider),
     quotaController: ref.read(quotaControllerProvider.notifier),
@@ -39,6 +42,7 @@ class RandomImageViewState {
   const RandomImageViewState({
     required this.preloadQueue,
     required this.historyImages,
+    required this.favoriteImages,
     required this.preloadTarget,
     required this.isFastBrowseMode,
     required this.consecutivePreloadExhaustions,
@@ -52,6 +56,7 @@ class RandomImageViewState {
     this.currentImage,
     this.currentMetadata,
     this.adjacentLoadingDelta,
+    this.favoriteLoadingImageId,
     this.previousAdjacentQueue = const [],
     this.nextAdjacentQueue = const [],
     this.selectedTag,
@@ -63,6 +68,7 @@ class RandomImageViewState {
     return const RandomImageViewState(
       preloadQueue: [],
       historyImages: [],
+      favoriteImages: [],
       preloadTarget: _defaultPreloadTarget,
       isFastBrowseMode: false,
       consecutivePreloadExhaustions: 0,
@@ -79,10 +85,12 @@ class RandomImageViewState {
   final RandomImage? currentImage;
   final ImageMetadata? currentMetadata;
   final int? adjacentLoadingDelta;
+  final int? favoriteLoadingImageId;
   final List<RandomImage> previousAdjacentQueue;
   final List<RandomImage> nextAdjacentQueue;
   final List<RandomImage> preloadQueue;
   final List<HistoryImage> historyImages;
+  final List<FavoriteImage> favoriteImages;
   final int preloadTarget;
   final bool isFastBrowseMode;
   final int consecutivePreloadExhaustions;
@@ -101,10 +109,12 @@ class RandomImageViewState {
     Object? currentImage = _unset,
     Object? currentMetadata = _unset,
     Object? adjacentLoadingDelta = _unset,
+    Object? favoriteLoadingImageId = _unset,
     List<RandomImage>? previousAdjacentQueue,
     List<RandomImage>? nextAdjacentQueue,
     List<RandomImage>? preloadQueue,
     List<HistoryImage>? historyImages,
+    List<FavoriteImage>? favoriteImages,
     int? preloadTarget,
     bool? isFastBrowseMode,
     int? consecutivePreloadExhaustions,
@@ -129,11 +139,15 @@ class RandomImageViewState {
       adjacentLoadingDelta: identical(adjacentLoadingDelta, _unset)
           ? this.adjacentLoadingDelta
           : adjacentLoadingDelta as int?,
+      favoriteLoadingImageId: identical(favoriteLoadingImageId, _unset)
+          ? this.favoriteLoadingImageId
+          : favoriteLoadingImageId as int?,
       previousAdjacentQueue:
           previousAdjacentQueue ?? this.previousAdjacentQueue,
       nextAdjacentQueue: nextAdjacentQueue ?? this.nextAdjacentQueue,
       preloadQueue: preloadQueue ?? this.preloadQueue,
       historyImages: historyImages ?? this.historyImages,
+      favoriteImages: favoriteImages ?? this.favoriteImages,
       preloadTarget: preloadTarget ?? this.preloadTarget,
       isFastBrowseMode: isFastBrowseMode ?? this.isFastBrowseMode,
       consecutivePreloadExhaustions:
@@ -162,12 +176,14 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
   RandomImageController({
     required RandomImageRepository repository,
     required LocalTagStore tagStore,
+    required FavoriteStore favoriteStore,
     required HistoryStore historyStore,
     required DownloadService downloadService,
     required QuotaController quotaController,
     required QuotaState Function() readQuotaState,
   })  : _repository = repository,
         _tagStore = tagStore,
+        _favoriteStore = favoriteStore,
         _historyStore = historyStore,
         _downloadService = downloadService,
         _quotaController = quotaController,
@@ -176,6 +192,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
 
   final RandomImageRepository _repository;
   final LocalTagStore _tagStore;
+  final FavoriteStore _favoriteStore;
   final HistoryStore _historyStore;
   final DownloadService _downloadService;
   final QuotaController _quotaController;
@@ -205,6 +222,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     }
 
     var historyImages = await _historyStore.load();
+    final favoriteImages = await _favoriteStore.load();
     var restoredImage = await _restoreLastCurrent(historyImages);
     var preloadQueue = await _historyStore.loadPreloadQueue(
       selectedTag: effectiveSelectedTag,
@@ -243,6 +261,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     state = state.copyWith(
       currentImage: restoredImage,
       preloadQueue: preloadQueue,
+      favoriteImages: favoriteImages,
       userTags: tags,
       selectedTag: effectiveSelectedTag,
       historyImages: historyImages,
@@ -406,6 +425,116 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
       state = state.copyWith(userTags: tags);
     }
     await switchTag(effectiveTag);
+  }
+
+  Future<void> toggleCurrentFavorite() async {
+    final image = state.currentImage;
+    final imageId = image?.imageId;
+    if (image == null || imageId == null) {
+      state = state.copyWith(errorMessage: '当前图片没有 Image ID，无法收藏');
+      return;
+    }
+    if (state.favoriteLoadingImageId != null) {
+      return;
+    }
+
+    final existing = state.favoriteImages.cast<FavoriteImage?>().firstWhere(
+          (item) => item?.imageId == imageId,
+          orElse: () => null,
+        );
+    state = state.copyWith(
+      favoriteLoadingImageId: imageId,
+      errorMessage: null,
+    );
+
+    try {
+      if (existing != null) {
+        final favorites = await _favoriteStore.delete(existing);
+        if (!mounted) {
+          return;
+        }
+        state = state.copyWith(
+          favoriteImages: favorites,
+          favoriteLoadingImageId: null,
+          errorMessage: '已取消收藏',
+        );
+        return;
+      }
+
+      ImageMetadata? metadata =
+          state.currentMetadata?.id == imageId ? state.currentMetadata : null;
+      var metadataFailed = false;
+      if (metadata == null && !_readQuotaState().isServerLocked) {
+        try {
+          metadata = await _repository.fetchImageMetadata(imageId);
+        } catch (_) {
+          metadataFailed = true;
+        }
+      } else if (metadata == null) {
+        metadataFailed = true;
+      }
+      if (!mounted) {
+        return;
+      }
+      if (state.currentImage?.imageId != imageId) {
+        state = state.copyWith(favoriteLoadingImageId: null);
+        return;
+      }
+
+      final favorite = FavoriteImage.fromRandomImage(
+        state.currentImage!,
+        favoritedAt: DateTime.now(),
+        metadata: metadata,
+      );
+      final favorites = await _favoriteStore.upsert(favorite);
+      if (!mounted) {
+        return;
+      }
+      if (state.currentImage?.imageId != imageId) {
+        state = state.copyWith(
+          favoriteImages: favorites,
+          favoriteLoadingImageId: null,
+        );
+        return;
+      }
+
+      final galleryId = metadata?.gallery?.id;
+      final imageWithMetadata =
+          galleryId == null ? state.currentImage : state.currentImage!.copyWith(
+                galleryId: galleryId,
+              );
+      state = state.copyWith(
+        currentImage: imageWithMetadata,
+        currentMetadata: metadata ?? state.currentMetadata,
+        favoriteImages: favorites,
+        favoriteLoadingImageId: null,
+        errorMessage: metadataFailed ? '已收藏，图集信息未补全' : '已收藏',
+      );
+    } catch (error) {
+      if (mounted && state.currentImage?.imageId == imageId) {
+        state = state.copyWith(
+          favoriteLoadingImageId: null,
+          errorMessage: _messageForError(error),
+        );
+      }
+    }
+  }
+
+  Future<void> deleteFavorite(FavoriteImage image) async {
+    try {
+      final favorites = await _favoriteStore.delete(image);
+      if (!mounted) {
+        return;
+      }
+      state = state.copyWith(
+        favoriteImages: favorites,
+        errorMessage: '已取消收藏',
+      );
+    } catch (error) {
+      if (mounted) {
+        state = state.copyWith(errorMessage: _messageForError(error));
+      }
+    }
   }
 
   Future<void> openAdjacentImage(int delta) async {

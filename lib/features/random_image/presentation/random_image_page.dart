@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
 import '../../../services/quota_service.dart';
+import 'favorites_page.dart';
 import 'history_page.dart';
 import 'random_image_controller.dart';
 import 'widgets/floating_adjacent_buttons.dart';
 import 'widgets/floating_download_button.dart';
+import 'widgets/floating_favorite_button.dart';
 import 'widgets/floating_next_button.dart';
 import 'widgets/image_stage.dart';
 import 'widgets/server_lockout_overlay.dart';
@@ -94,6 +96,12 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                     !state.isNextLoading &&
                     !isAdjacentLoading &&
                     state.currentImage?.imageId != null;
+                final imageId = state.currentImage?.imageId;
+                final isFavorited = imageId != null &&
+                    state.favoriteImages.any((item) => item.imageId == imageId);
+                final isFavoriteLoading =
+                    state.favoriteLoadingImageId != null &&
+                        state.favoriteLoadingImageId == imageId;
                 final drawerDragEnabled =
                     !state.isImageZoomed && !quota.isServerLocked;
 
@@ -149,6 +157,22 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                               ),
                             ),
                             Positioned(
+                              left: 22,
+                              bottom: padding.bottom + 88,
+                              child: FloatingFavoriteButton(
+                                onPressed: state.currentImage?.imageId == null
+                                    ? null
+                                    : () {
+                                        unawaited(
+                                          controller.toggleCurrentFavorite(),
+                                        );
+                                      },
+                                isFavorited: isFavorited,
+                                isLoading: isFavoriteLoading,
+                                opacity: buttonOpacity,
+                              ),
+                            ),
+                            Positioned(
                               left: 0,
                               right: 0,
                               bottom: padding.bottom + 28,
@@ -196,6 +220,7 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                         onAddTag: _showAddTagSheet,
                         onDeleteTag: (tag) => _confirmDeleteTag(tag),
                         onOpenHistory: _openHistory,
+                        onOpenFavorites: _openFavorites,
                         onLoadMetadata: () {
                           unawaited(controller.loadCurrentMetadata());
                         },
@@ -327,6 +352,13 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
     _closeDrawer();
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const HistoryPage()),
+    );
+  }
+
+  Future<void> _openFavorites() async {
+    _closeDrawer();
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const FavoritesPage()),
     );
   }
 }
