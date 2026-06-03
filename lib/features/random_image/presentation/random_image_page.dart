@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
 import '../../../services/quota_service.dart';
+import '../../tags/presentation/tag_library_page.dart';
 import 'favorites_page.dart';
 import 'history_page.dart';
 import 'random_image_controller.dart';
@@ -218,6 +219,7 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                           controller.switchTag(tag);
                         },
                         onAddTag: _showAddTagSheet,
+                        onOpenTagLibrary: _openTagLibrary,
                         onDeleteTag: (tag) => _confirmDeleteTag(tag),
                         onOpenHistory: _openHistory,
                         onOpenFavorites: _openFavorites,
@@ -360,6 +362,17 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const FavoritesPage()),
     );
+  }
+
+  Future<void> _openTagLibrary() async {
+    _closeDrawer();
+    final tag = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(builder: (_) => const TagLibraryPage()),
+    );
+    if (tag == null || !mounted) {
+      return;
+    }
+    await ref.read(randomImageControllerProvider.notifier).useMetadataTag(tag);
   }
 }
 

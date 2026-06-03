@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/app_exceptions.dart';
+import '../../tags/domain/tag_info.dart';
 import '../domain/image_metadata.dart';
 
 final veilApiClientProvider = Provider<VeilApiClient>((ref) {
@@ -123,6 +124,112 @@ class VeilApiClient {
     } on TypeError catch (error) {
       _log('metadata shape error: $error');
       throw const NiceViewException('元数据格式不完整');
+    }
+  }
+
+  Future<List<TagInfo>> tags() async {
+    final decoded = await _jsonRequest(
+      '/v1/tags',
+      queryParameters: const {
+        'limit': '20000',
+        'offset': '0',
+      },
+    );
+    final tags = <TagInfo>[];
+    for (final item in _tagItems(decoded)) {
+      try {
+        if (item is String) {
+          tags.add(TagInfo(name: item));
+        } else if (item is Map) {
+          tags.add(TagInfo.fromJson(Map<String, Object?>.from(item)));
+        }
+      } on FormatException catch (error) {
+        _log('tag parse skipped: $error');
+      }
+    }
+    return tags;
+  }
+
+  Iterable<dynamic> _tagItems(Object? decoded) {
+    if (decoded is List<dynamic>) {
+      return decoded;
+    }
+    if (decoded is Map) {
+      for (final key in const ['tags', 'items', 'data']) {
+        final value = decoded[key];
+        if (value is List<dynamic>) {
+          return value;
+        }
+      }
+    }
+    return const <dynamic>[];
+  }
+
+  Future<Object?> _jsonRequest(
+    String path, {
+    Map<String, String>? queryParameters,
+  }) async {
+    final uri = Uri.https(_host, path, queryParameters);
+    _log('GET $uri');
+
+    late final HttpClientResponse response;
+    try {
+      final request = await _client.getUrl(uri).timeout(_receiveTimeout);
+      request.headers
+        ..set(HttpHeaders.acceptHeader, 'application/json')
+        ..set(HttpHeaders.userAgentHeader, 'NiceView/1.0');
+      response = await request.close().timeout(_receiveTimeout);
+    } on TimeoutException catch (error) {
+      _log('json request timeout: $error');
+      throw const NiceViewException('标签请求超时，稍后再试');
+    } on SocketException catch (error) {
+      _log('json socket error: $error');
+      throw const NiceViewException('网络连接失败，稍后再试');
+    } on HandshakeException catch (error) {
+      _log('json tls error: $error');
+      throw const NiceViewException('安全连接失败，稍后再试');
+    } on HttpException catch (error) {
+      _log('json http error: $error');
+      throw NiceViewException(error.message);
+    }
+
+    final statusCode = response.statusCode;
+    late final List<int> bytes;
+    try {
+      final builder = BytesBuilder(copy: false);
+      await for (final chunk in response.timeout(_receiveTimeout)) {
+        builder.add(chunk);
+      }
+      bytes = builder.takeBytes();
+    } on TimeoutException catch (error) {
+      _log('json body timeout: $error');
+      throw const NiceViewException('标签下载超时，稍后再试');
+    } on SocketException catch (error) {
+      _log('json body socket error: $error');
+      throw const NiceViewException('标签下载中断，稍后再试');
+    } on HttpException catch (error) {
+      _log('json body http error: $error');
+      throw const NiceViewException('标签下载中断，稍后再试');
+    }
+
+    if (statusCode == 429) {
+      throw const ServerLockoutException('请求太快了，请稍后再试');
+    }
+    if (statusCode == 403) {
+      throw const NiceViewException('IP 已被封禁，请联系管理员');
+    }
+    if (statusCode == 503) {
+      throw const NiceViewException('接口已被管理员关闭');
+    }
+    if (statusCode < 200 || statusCode >= 300) {
+      throw NiceViewException('服务器暂时不可用：$statusCode');
+    }
+
+    try {
+      return jsonDecode(utf8.decode(bytes));
+    } on FormatException catch (error) {
+      _log('json parse error: $error');
+      throw const NiceViewException('标签数据解析失败');
     }
   }
 

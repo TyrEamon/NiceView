@@ -12,6 +12,7 @@ class SideInfoDrawer extends StatelessWidget {
     required this.quota,
     required this.onTagSelected,
     required this.onAddTag,
+    required this.onOpenTagLibrary,
     required this.onDeleteTag,
     required this.onOpenHistory,
     required this.onOpenFavorites,
@@ -24,6 +25,7 @@ class SideInfoDrawer extends StatelessWidget {
   final QuotaState quota;
   final ValueChanged<String?> onTagSelected;
   final VoidCallback onAddTag;
+  final VoidCallback onOpenTagLibrary;
   final ValueChanged<String> onDeleteTag;
   final VoidCallback onOpenHistory;
   final VoidCallback onOpenFavorites;
@@ -59,6 +61,19 @@ class SideInfoDrawer extends StatelessWidget {
               onPressed: onAddTag,
               icon: const Icon(Icons.add_rounded),
               label: const Text('添加标签'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: niceText,
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: onOpenTagLibrary,
+              icon: const Icon(Icons.manage_search_rounded),
+              label: const Text('标签库'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: niceText,
                 side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
