@@ -37,7 +37,7 @@ final randomImageControllerProvider =
 
 const _unset = Object();
 const _defaultPreloadTarget = 6;
-const _adjacentPreloadTarget = 4;
+const _adjacentPreloadTarget = 6;
 const _recentLocalImageLimit = 48;
 
 class RandomImageViewState {
