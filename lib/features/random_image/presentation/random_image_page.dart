@@ -93,8 +93,7 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                     !state.isInitialLoading &&
                     !state.isNextLoading &&
                     !isAdjacentLoading &&
-                    state.currentImage?.imageId != null &&
-                    quota.canAcquire;
+                    state.currentImage?.imageId != null;
                 final drawerDragEnabled =
                     !state.isImageZoomed && !quota.isServerLocked;
 
