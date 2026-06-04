@@ -9,6 +9,10 @@ import '../../../services/app_exceptions.dart';
 import '../../../services/download_service.dart';
 import '../../../services/quota_service.dart';
 import '../../backup/data/backup_service.dart';
+import '../../backup/data/webdav_config_store.dart';
+import '../../backup/data/webdav_service.dart';
+import '../../backup/domain/webdav_backup_file.dart';
+import '../../backup/domain/webdav_config.dart';
 import '../../tags/data/local_tag_store.dart';
 import '../data/favorite_store.dart';
 import '../data/history_store.dart';
@@ -27,6 +31,8 @@ final randomImageControllerProvider =
     favoriteStore: ref.watch(favoriteStoreProvider),
     historyStore: ref.watch(historyStoreProvider),
     backupService: ref.watch(backupServiceProvider),
+    webDavConfigStore: ref.watch(webDavConfigStoreProvider),
+    webDavService: ref.watch(webDavServiceProvider),
     downloadService: ref.watch(downloadServiceProvider),
     quotaController: ref.read(quotaControllerProvider.notifier),
     readQuotaState: () => ref.read(quotaControllerProvider),
@@ -181,6 +187,8 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     required FavoriteStore favoriteStore,
     required HistoryStore historyStore,
     required BackupService backupService,
+    required WebDavConfigStore webDavConfigStore,
+    required WebDavService webDavService,
     required DownloadService downloadService,
     required QuotaController quotaController,
     required QuotaState Function() readQuotaState,
@@ -189,6 +197,8 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         _favoriteStore = favoriteStore,
         _historyStore = historyStore,
         _backupService = backupService,
+        _webDavConfigStore = webDavConfigStore,
+        _webDavService = webDavService,
         _downloadService = downloadService,
         _quotaController = quotaController,
         _readQuotaState = readQuotaState,
@@ -199,6 +209,8 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
   final FavoriteStore _favoriteStore;
   final HistoryStore _historyStore;
   final BackupService _backupService;
+  final WebDavConfigStore _webDavConfigStore;
+  final WebDavService _webDavService;
   final DownloadService _downloadService;
   final QuotaController _quotaController;
   final QuotaState Function() _readQuotaState;
@@ -611,8 +623,51 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     );
   }
 
+  WebDavConfig loadWebDavConfig() {
+    return _webDavConfigStore.load();
+  }
+
+  Future<void> saveWebDavConfig(WebDavConfig config) {
+    return _webDavConfigStore.save(config);
+  }
+
+  Future<void> testWebDavConnection(WebDavConfig config) {
+    return _webDavService.testConnection(config);
+  }
+
+  Future<String> uploadBackupToWebDav() async {
+    final config = _webDavConfigStore.load();
+    final document = _backupService.createBackupDocument(
+      favorites: state.favoriteImages,
+    );
+    return _webDavService.uploadBackup(
+      config: config,
+      fileName: document.fileName,
+      bytes: document.bytes,
+    );
+  }
+
+  Future<List<WebDavBackupFile>> listWebDavBackups() {
+    return _webDavService.listBackups(_webDavConfigStore.load());
+  }
+
+  Future<BackupImportSummary> importWebDavBackup(
+    WebDavBackupFile file,
+  ) async {
+    final bytes = await _webDavService.downloadBackup(
+      config: _webDavConfigStore.load(),
+      file: file,
+    );
+    final payload = _backupService.parseBackupBytes(bytes);
+    return _mergeBackupPayload(payload);
+  }
+
   Future<BackupImportSummary> importBackup() async {
     final payload = await _backupService.importBackup();
+    return _mergeBackupPayload(payload);
+  }
+
+  Future<BackupImportSummary> _mergeBackupPayload(BackupPayload payload) async {
     final previousFavoriteCount = state.favoriteImages.length;
 
     final mergedFavorites = await _favoriteStore.merge(payload.favorites);

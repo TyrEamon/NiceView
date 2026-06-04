@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,33 +19,41 @@ class BackupService {
 
   static const _channel = MethodChannel('nice_view/backups');
 
-  Future<String> exportBackup({
+  BackupDocument createBackupDocument({
     required List<FavoriteImage> favorites,
-  }) async {
+  }) {
     final exportedAt = DateTime.now();
     final payload = jsonEncode({
       'version': 1,
       'exportedAt': exportedAt.toIso8601String(),
       'favorites': favorites.map((image) => image.toJson()).toList(),
     });
-    final fileName = _fileName(exportedAt);
-    final bytes = Uint8List.fromList(utf8.encode(payload));
+    return BackupDocument(
+      fileName: _fileName(exportedAt),
+      bytes: Uint8List.fromList(utf8.encode(payload)),
+    );
+  }
+
+  Future<String> exportBackup({
+    required List<FavoriteImage> favorites,
+  }) async {
+    final document = createBackupDocument(favorites: favorites);
 
     if (Platform.isAndroid) {
       try {
         return await _channel.invokeMethod<String>('exportJson', {
-              'bytes': bytes,
-              'fileName': fileName,
+              'bytes': document.bytes,
+              'fileName': document.fileName,
             }) ??
-            fileName;
+            document.fileName;
       } on PlatformException catch (error) {
         throw NiceViewException(error.message ?? '备份导出失败');
       }
     }
 
     final directory = await getApplicationDocumentsDirectory();
-    final file = File(p.join(directory.path, fileName));
-    await file.writeAsBytes(bytes, flush: true);
+    final file = File(p.join(directory.path, document.fileName));
+    await file.writeAsBytes(document.bytes, flush: true);
     return file.path;
   }
 
@@ -69,6 +78,13 @@ class BackupService {
     if (bytes.isEmpty) {
       throw const NiceViewException('备份文件为空');
     }
+    return parseBackupBytes(bytes);
+  }
+
+  BackupPayload parseBackupBytes(Uint8List bytes) {
+    if (bytes.isEmpty) {
+      throw const NiceViewException('备份文件为空');
+    }
     return BackupPayload.fromJsonString(utf8.decode(bytes));
   }
 
@@ -78,6 +94,16 @@ class BackupService {
         '${value.year}${two(value.month)}${two(value.day)}-'
         '${two(value.hour)}${two(value.minute)}${two(value.second)}.json';
   }
+}
+
+class BackupDocument {
+  const BackupDocument({
+    required this.fileName,
+    required this.bytes,
+  });
+
+  final String fileName;
+  final Uint8List bytes;
 }
 
 class BackupPayload {
