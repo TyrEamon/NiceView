@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,18 +29,33 @@ class DownloadService {
     final bytes = await file.readAsBytes();
     final fileName = _fileNameFor(image);
     final mimeType = image.contentType?.split(';').first.trim() ?? 'image/jpeg';
+    return saveImageBytes(bytes, fileName, mimeType);
+  }
+
+  Future<String> saveImageBytes(
+    List<int> bytes,
+    String fileName,
+    String mimeType, {
+    String? subDir,
+  }) async {
+    final safeFileName = sanitizeFileName(fileName);
+    final safeSubDir = subDir == null ? null : sanitizeFileName(subDir);
 
     if (Platform.isAndroid) {
       try {
-        return await _saveAndroid(bytes, fileName, mimeType);
+        return await _saveAndroid(bytes, safeFileName, mimeType, safeSubDir);
       } on PlatformException {
         await _requestAndroidPermissionBestEffort();
-        return _saveAndroid(bytes, fileName, mimeType);
+        return _saveAndroid(bytes, safeFileName, mimeType, safeSubDir);
       }
     }
 
     final directory = await getApplicationDocumentsDirectory();
-    final output = File(p.join(directory.path, fileName));
+    final outputDirectory = safeSubDir == null || safeSubDir.isEmpty
+        ? directory
+        : Directory(p.join(directory.path, safeSubDir));
+    await outputDirectory.create(recursive: true);
+    final output = File(p.join(outputDirectory.path, safeFileName));
     await output.writeAsBytes(bytes, flush: true);
     return output.path;
   }
@@ -48,11 +64,13 @@ class DownloadService {
     List<int> bytes,
     String fileName,
     String mimeType,
+    String? subDir,
   ) async {
     final uri = await _channel.invokeMethod<String>('saveImage', {
       'bytes': Uint8List.fromList(bytes),
       'fileName': fileName,
       'mimeType': mimeType,
+      if (subDir != null && subDir.isNotEmpty) 'relativeSubDir': subDir,
     });
     return uri ?? fileName;
   }
@@ -70,4 +88,15 @@ class DownloadService {
         DateTime.now().millisecondsSinceEpoch.toString();
     return 'nice_view_$id${extensionForContentType(image.contentType)}';
   }
+}
+
+String sanitizeFileName(String value, {int maxLength = 80}) {
+  final sanitized = value
+      .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  final fallback = sanitized.isEmpty ? 'untitled' : sanitized;
+  return fallback.length <= maxLength
+      ? fallback
+      : fallback.substring(0, maxLength).trimRight();
 }
