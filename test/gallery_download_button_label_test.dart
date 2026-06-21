@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nice_view/features/random_image/presentation/widgets/side_info_drawer.dart';
+import 'package:nice_view/features/download/domain/gallery_title_parser.dart';
 
 void main() {
   test('parses image count hints from gallery titles', () {

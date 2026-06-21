@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme.dart';
+import '../../../download/domain/gallery_title_parser.dart';
 import '../../../download/presentation/gallery_download_controller.dart';
 import '../../../download/presentation/widgets/gallery_download_sheet.dart';
 import '../../domain/quota_state.dart';
@@ -349,23 +350,6 @@ class _GalleryDownloadButton extends StatelessWidget {
       ),
     );
   }
-}
-
-String galleryDownloadButtonLabel(String? title) {
-  final count = galleryImageCountHint(title);
-  return count == null ? '下载整包' : '下载整包 (${count}P)';
-}
-
-int? galleryImageCountHint(String? title) {
-  if (title == null) {
-    return null;
-  }
-  final match = RegExp(r'\((\d+)\s*P(?:[^)]*)\)', caseSensitive: false)
-      .firstMatch(title);
-  if (match == null) {
-    return null;
-  }
-  return int.tryParse(match.group(1)!);
 }
 
 class _ImageIdOpener extends StatefulWidget {
