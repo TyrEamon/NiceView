@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/app_exceptions.dart';
 import '../../../services/rate_limiter.dart';
 import '../../tags/domain/tag_info.dart';
+import '../domain/gallery_detail.dart';
 import '../domain/image_metadata.dart';
 
 final veilApiClientProvider = Provider<VeilApiClient>((ref) {
@@ -50,6 +51,22 @@ class VeilApiClient {
 
   Future<VeilImageResponse> imageById(int imageId) {
     return _imageRequest('/v1/image/$imageId');
+  }
+
+  Future<GalleryDetail> gallery(int id) async {
+    final decoded = await _jsonRequest('/v1/gallery/$id');
+    if (decoded is! Map) {
+      throw const NiceViewException('图集数据格式不完整');
+    }
+    try {
+      return GalleryDetail.fromJson(Map<String, Object?>.from(decoded));
+    } on FormatException catch (error) {
+      _log('gallery parse error: $error');
+      throw const NiceViewException('图集数据解析失败');
+    } on TypeError catch (error) {
+      _log('gallery shape error: $error');
+      throw const NiceViewException('图集数据格式不完整');
+    }
   }
 
   Future<ImageMetadata> imageMetadataById(int imageId) async {
