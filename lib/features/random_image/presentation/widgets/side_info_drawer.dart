@@ -332,7 +332,7 @@ class _GalleryDownloadButton extends StatelessWidget {
             ? null
             : isCurrentDownload
                 ? onOpenDownloadSheet
-                : () => onStartGalleryDownload(id!, title),
+                : () => onStartGalleryDownload(id, title),
         icon: const Icon(Icons.download_rounded),
         label: Text(
           label,
