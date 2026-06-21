@@ -20,7 +20,7 @@ final galleryDownloadRepositoryProvider = Provider<GalleryDownloadRepository>((
     loadImage: api.imageById,
     saveImageBytes: downloadService.saveImageBytes,
     manifestStore: ref.watch(downloadManifestStoreProvider),
-    rateLimiterState: () => rateLimiter.state,
+    rateLimiterState: () => rateLimiter.currentState,
     refreshRateLimiter: rateLimiter.refresh,
   );
 });
@@ -52,7 +52,7 @@ class GalleryDownloadRepository {
         _manifestStore = manifestStore,
         _rateLimiterState = rateLimiterState,
         _refreshRateLimiter = refreshRateLimiter,
-        _delay = delay ?? Future<void>.delayed;
+        _delay = delay ?? ((duration) => Future<void>.delayed(duration));
 
   static const _maxRetries = 2;
 

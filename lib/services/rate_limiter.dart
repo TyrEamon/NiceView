@@ -162,6 +162,8 @@ class RateLimiter extends StateNotifier<RateLimiterState> {
   final Future<void> Function(Duration duration) _sleep;
   Future<void> _tail = Future<void>.value();
 
+  RateLimiterState get currentState => state;
+
   Future<void> acquire() {
     final ready = _ignoreTailError(_tail);
     final operation = ready.then((_) => _acquireLocked());
