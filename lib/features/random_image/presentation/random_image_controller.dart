@@ -305,7 +305,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
       return;
     }
     if (_readQuotaState().isServerLocked) {
-      state = state.copyWith(errorMessage: '歇 60 秒，让服务器也喝口水。');
+      state = state.copyWith(errorMessage: '服务器冷却中，稍后再试。');
       return;
     }
 
@@ -778,7 +778,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     }
 
     if (_readQuotaState().isServerLocked) {
-      state = state.copyWith(errorMessage: '歇 60 秒，让服务器也喝口水。');
+      state = state.copyWith(errorMessage: '服务器冷却中，稍后再试。');
       return;
     }
 
@@ -1422,7 +1422,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
 
   String _messageForError(Object error) {
     if (error is ServerLockoutException) {
-      return '歇 60 秒，让服务器也喝口水。';
+      return '服务器冷却中，稍后再试。';
     }
     if (error is QuotaExceededException) {
       return _quotaRecoveryMessage();

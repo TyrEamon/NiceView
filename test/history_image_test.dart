@@ -5,6 +5,7 @@ import 'package:nice_view/features/random_image/data/random_image_repository.dar
 import 'package:nice_view/features/random_image/domain/history_image.dart';
 import 'package:nice_view/features/random_image/domain/image_metadata.dart';
 import 'package:nice_view/features/random_image/domain/random_image.dart';
+import 'package:nice_view/services/download_service.dart';
 
 void main() {
   test('empty history list can be sorted by callers', () {
@@ -43,6 +44,14 @@ void main() {
     expect(extensionForContentType('image/webp; charset=utf-8'), '.webp');
     expect(extensionForContentType('image/gif'), '.gif');
     expect(extensionForContentType(null), '.jpg');
+  });
+
+  test('download file names are sanitized for gallery directories', () {
+    final value = sanitizeFileName('  A/B:C*D?E"F<G>H|  ');
+
+    expect(value, 'A_B_C_D_E_F_G_H_');
+    expect(sanitizeFileName('   '), 'untitled');
+    expect(sanitizeFileName(List.filled(100, 'a').join()).length, 80);
   });
 
   test('preload queue images parse persisted json', () {

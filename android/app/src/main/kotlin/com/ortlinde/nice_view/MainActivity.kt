@@ -32,7 +32,8 @@ class MainActivity : FlutterActivity() {
                             val fileName = call.argument<String>("fileName")
                                 ?: "nice_view_${System.currentTimeMillis()}.jpg"
                             val mimeType = call.argument<String>("mimeType") ?: "image/jpeg"
-                            result.success(saveImage(bytes, fileName, mimeType))
+                            val relativeSubDir = call.argument<String>("relativeSubDir")
+                            result.success(saveImage(bytes, fileName, mimeType, relativeSubDir))
                         } catch (error: Throwable) {
                             result.error("SAVE_IMAGE_FAILED", error.message, null)
                         }
@@ -68,15 +69,21 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun saveImage(bytes: ByteArray, fileName: String, mimeType: String): String {
+    private fun saveImage(
+        bytes: ByteArray,
+        fileName: String,
+        mimeType: String,
+        relativeSubDir: String?
+    ): String {
         val resolver = applicationContext.contentResolver
+        val relativePath = buildPicturesRelativePath(relativeSubDir)
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
             put(MediaStore.Images.Media.MIME_TYPE, mimeType)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(
                     MediaStore.Images.Media.RELATIVE_PATH,
-                    Environment.DIRECTORY_PICTURES + "/Nice View"
+                    relativePath
                 )
                 put(MediaStore.Images.Media.IS_PENDING, 1)
             }
@@ -97,6 +104,15 @@ class MainActivity : FlutterActivity() {
             resolver.update(uri, completed, null, null)
         }
         return uri.toString()
+    }
+
+    private fun buildPicturesRelativePath(relativeSubDir: String?): String {
+        val root = Environment.DIRECTORY_PICTURES + "/NiceView"
+        val subDir = relativeSubDir?.trim()?.trim('/')
+        if (subDir.isNullOrEmpty()) {
+            return root
+        }
+        return "$root/$subDir"
     }
 
     private fun startCreateBackupDocument(

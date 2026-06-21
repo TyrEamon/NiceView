@@ -7,11 +7,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/app_exceptions.dart';
+import '../../../services/rate_limiter.dart';
 import '../../tags/domain/tag_info.dart';
+import '../domain/gallery_detail.dart';
 import '../domain/image_metadata.dart';
 
 final veilApiClientProvider = Provider<VeilApiClient>((ref) {
-  return VeilApiClient();
+  return VeilApiClient(ref.watch(rateLimiterProvider.notifier));
 });
 
 class VeilImageResponse {
@@ -29,7 +31,7 @@ class VeilImageResponse {
 }
 
 class VeilApiClient {
-  VeilApiClient() : _client = HttpClient() {
+  VeilApiClient(this._rateLimiter) : _client = HttpClient() {
     _client.connectionTimeout = const Duration(seconds: 60);
     _client.idleTimeout = const Duration(seconds: 15);
   }
@@ -38,6 +40,7 @@ class VeilApiClient {
   static const _receiveTimeout = Duration(seconds: 90);
 
   final HttpClient _client;
+  final RateLimiter _rateLimiter;
 
   Future<VeilImageResponse> random({String? tag}) {
     return _imageRequest(
@@ -50,12 +53,29 @@ class VeilApiClient {
     return _imageRequest('/v1/image/$imageId');
   }
 
+  Future<GalleryDetail> gallery(int id) async {
+    final decoded = await _jsonRequest('/v1/gallery/$id');
+    if (decoded is! Map) {
+      throw const NiceViewException('图集数据格式不完整');
+    }
+    try {
+      return GalleryDetail.fromJson(Map<String, Object?>.from(decoded));
+    } on FormatException catch (error) {
+      _log('gallery parse error: $error');
+      throw const NiceViewException('图集数据解析失败');
+    } on TypeError catch (error) {
+      _log('gallery shape error: $error');
+      throw const NiceViewException('图集数据格式不完整');
+    }
+  }
+
   Future<ImageMetadata> imageMetadataById(int imageId) async {
     final uri = Uri.https(_host, '/v1/image/$imageId/meta');
     _log('GET $uri');
 
     late final HttpClientResponse response;
     try {
+      await _rateLimiter.acquire();
       final request = await _client.getUrl(uri).timeout(_receiveTimeout);
       request.headers
         ..set(HttpHeaders.acceptHeader, 'application/json')
@@ -99,13 +119,15 @@ class VeilApiClient {
     }
 
     if (statusCode == 429) {
+      await _rateLimiter.noteLockout();
       throw const ServerLockoutException('请求太快了，请稍后再试');
     }
     if (statusCode == 404) {
       throw const ImageNotFoundException('图片不存在');
     }
     if (statusCode == 403) {
-      throw const NiceViewException('IP 已被封禁，请联系管理员');
+      await _rateLimiter.noteLockout();
+      throw const ServerLockoutException('IP 已被封禁，请 30 分钟后再试');
     }
     if (statusCode == 503) {
       throw const NiceViewException('接口已被管理员关闭');
@@ -174,6 +196,7 @@ class VeilApiClient {
 
     late final HttpClientResponse response;
     try {
+      await _rateLimiter.acquire();
       final request = await _client.getUrl(uri).timeout(_receiveTimeout);
       request.headers
         ..set(HttpHeaders.acceptHeader, 'application/json')
@@ -213,10 +236,12 @@ class VeilApiClient {
     }
 
     if (statusCode == 429) {
+      await _rateLimiter.noteLockout();
       throw const ServerLockoutException('请求太快了，请稍后再试');
     }
     if (statusCode == 403) {
-      throw const NiceViewException('IP 已被封禁，请联系管理员');
+      await _rateLimiter.noteLockout();
+      throw const ServerLockoutException('IP 已被封禁，请 30 分钟后再试');
     }
     if (statusCode == 503) {
       throw const NiceViewException('接口已被管理员关闭');
@@ -245,6 +270,7 @@ class VeilApiClient {
 
     late final HttpClientResponse response;
     try {
+      await _rateLimiter.acquire();
       final request = await _client.getUrl(uri).timeout(_receiveTimeout);
       request.headers
         ..set(HttpHeaders.acceptHeader, 'image/*,*/*;q=0.8')
@@ -289,7 +315,12 @@ class VeilApiClient {
     }
 
     if (statusCode == 429) {
+      await _rateLimiter.noteLockout();
       throw const ServerLockoutException('请求太快了，请稍后再试');
+    }
+    if (statusCode == 403) {
+      await _rateLimiter.noteLockout();
+      throw const ServerLockoutException('IP 已被封禁，请 30 分钟后再试');
     }
     if (statusCode == 404) {
       throw const ImageNotFoundException('图片不存在');

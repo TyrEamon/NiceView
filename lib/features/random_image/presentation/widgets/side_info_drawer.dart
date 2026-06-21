@@ -1,12 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme.dart';
+import '../../../download/domain/gallery_title_parser.dart';
+import '../../../download/presentation/gallery_download_controller.dart';
+import '../../../download/presentation/widgets/gallery_download_sheet.dart';
 import '../../domain/quota_state.dart';
 import '../random_image_controller.dart';
 import 'quota_bar.dart';
 import 'tag_strip.dart';
 
-class SideInfoDrawer extends StatelessWidget {
+class SideInfoDrawer extends ConsumerWidget {
   const SideInfoDrawer({
     required this.state,
     required this.quota,
@@ -37,8 +43,11 @@ class SideInfoDrawer extends StatelessWidget {
   final ValueChanged<String> onMetadataTagSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final image = state.currentImage;
+    final downloadState = ref.watch(galleryDownloadControllerProvider);
+    final downloadController =
+        ref.read(galleryDownloadControllerProvider.notifier);
     return Material(
       color: const Color(0xFF151618),
       child: SafeArea(
@@ -169,6 +178,16 @@ class SideInfoDrawer extends StatelessWidget {
               _MetadataPanel(
                 state: state,
                 onTagSelected: onMetadataTagSelected,
+                downloadState: downloadState,
+                onOpenDownloadSheet: () {
+                  unawaited(showGalleryDownloadSheet(context));
+                },
+                onStartGalleryDownload: (galleryId, title) {
+                  unawaited(
+                    downloadController.start(galleryId, titleHint: title),
+                  );
+                  unawaited(showGalleryDownloadSheet(context));
+                },
               ),
             ],
             if (state.isPreloading) ...[
@@ -194,10 +213,16 @@ class _MetadataPanel extends StatelessWidget {
   const _MetadataPanel({
     required this.state,
     required this.onTagSelected,
+    required this.downloadState,
+    required this.onOpenDownloadSheet,
+    required this.onStartGalleryDownload,
   });
 
   final RandomImageViewState state;
   final ValueChanged<String> onTagSelected;
+  final GalleryDownloadUiState downloadState;
+  final VoidCallback onOpenDownloadSheet;
+  final void Function(int galleryId, String? title) onStartGalleryDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -254,7 +279,74 @@ class _MetadataPanel extends StatelessWidget {
               },
             ),
           ],
+          const SizedBox(height: 12),
+          _GalleryDownloadButton(
+            galleryId: gallery?.id,
+            title: title,
+            downloadState: downloadState,
+            onOpenDownloadSheet: onOpenDownloadSheet,
+            onStartGalleryDownload: onStartGalleryDownload,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _GalleryDownloadButton extends StatelessWidget {
+  const _GalleryDownloadButton({
+    required this.galleryId,
+    required this.title,
+    required this.downloadState,
+    required this.onOpenDownloadSheet,
+    required this.onStartGalleryDownload,
+  });
+
+  final int? galleryId;
+  final String? title;
+  final GalleryDownloadUiState downloadState;
+  final VoidCallback onOpenDownloadSheet;
+  final void Function(int galleryId, String? title) onStartGalleryDownload;
+
+  @override
+  Widget build(BuildContext context) {
+    final id = galleryId;
+    final isCurrentDownload = id != null &&
+        downloadState.galleryId == id &&
+        downloadState.isRunning;
+    final isAnotherDownloadRunning =
+        downloadState.isRunning && !isCurrentDownload;
+    final progress = downloadState.progress;
+    final label = isCurrentDownload
+        ? '下载中… ${progress?.done ?? 0}/${progress?.total ?? 0}'
+        : isAnotherDownloadRunning
+            ? '已有下载进行中'
+            : galleryDownloadButtonLabel(title);
+    final enabled = id != null && !isAnotherDownloadRunning;
+
+    return SizedBox(
+      height: 44,
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: !enabled
+            ? null
+            : isCurrentDownload
+                ? onOpenDownloadSheet
+                : () => onStartGalleryDownload(id, title),
+        icon: const Icon(Icons.download_rounded),
+        label: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: niceAmber,
+          disabledForegroundColor: niceMuted,
+          side: BorderSide(color: enabled ? niceAmber : niceMuted),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
       ),
     );
   }
