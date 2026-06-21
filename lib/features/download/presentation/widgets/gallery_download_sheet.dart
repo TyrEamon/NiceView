@@ -9,8 +9,8 @@ import '../../../../services/download_service.dart';
 import '../../domain/gallery_download_types.dart';
 import '../gallery_download_controller.dart';
 
-Future<void?> showGalleryDownloadSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
+Future<void> showGalleryDownloadSheet(BuildContext context) async {
+  await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,

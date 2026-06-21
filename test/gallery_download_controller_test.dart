@@ -141,7 +141,7 @@ typedef _FakeDownloadRun = Future<GalleryDownloadResult> Function({
 
 class _FakeRepository extends GalleryDownloadRepository {
   _FakeRepository._({
-    required DownloadManifestStore manifestStore,
+    required DownloadManifestStore store,
     required _FakeDownloadRun run,
   })  : _run = run,
         super(
@@ -157,7 +157,7 @@ class _FakeRepository extends GalleryDownloadRepository {
             String mimeType, {
             String? subDir,
           }) async => '',
-          manifestStore: manifestStore,
+          manifestStore: store,
           rateLimiterState: () => RateLimiterState.initial(
             const RateLimiterConfig(),
             updatedAt: DateTime(2026, 6, 22),
@@ -173,7 +173,7 @@ class _FakeRepository extends GalleryDownloadRepository {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     return _FakeRepository._(
-      manifestStore: DownloadManifestStore(preferences),
+      store: DownloadManifestStore(preferences),
       run: run,
     );
   }
