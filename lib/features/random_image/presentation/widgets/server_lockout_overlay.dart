@@ -17,7 +17,13 @@ class ServerLockoutOverlay extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final seconds = quota.serverLockoutRemaining.inSeconds.clamp(0, 60).toInt();
+    final remaining = quota.serverLockoutRemaining;
+    final minutes = remaining.inMinutes;
+    final seconds = remaining.inSeconds.remainder(60).toString().padLeft(
+          2,
+          '0',
+        );
+    final label = '$minutes:$seconds';
     return Positioned.fill(
       child: Stack(
         fit: StackFit.expand,
@@ -28,7 +34,7 @@ class ServerLockoutOverlay extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '${seconds}s',
+                  label,
                   style: const TextStyle(
                     color: niceText,
                     fontSize: 48,
@@ -37,7 +43,7 @@ class ServerLockoutOverlay extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  '歇 60 秒，让服务器也喝口水。',
+                  '服务器冷却中，稍后再试。',
                   style: TextStyle(color: niceMuted, fontSize: 13),
                 ),
               ],

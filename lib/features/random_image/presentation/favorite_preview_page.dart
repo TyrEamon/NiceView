@@ -299,7 +299,7 @@ class _FavoritePreviewPageState extends ConsumerState<FavoritePreviewPage> {
 
   String _messageForError(Object error) {
     if (error is ServerLockoutException) {
-      return '歇 60 秒，让服务器也喝口水。';
+      return '服务器冷却中，稍后再试。';
     }
     if (error is QuotaExceededException) {
       return '请求额度已用尽，请稍后再试';

@@ -79,7 +79,7 @@ class QuotaController extends StateNotifier<QuotaState> {
 
   Future<void> startServerLockout() async {
     state = state.pruned().copyWith(
-          serverLockoutUntil: DateTime.now().add(const Duration(seconds: 60)),
+          serverLockoutUntil: DateTime.now().add(const Duration(minutes: 30)),
         );
     await _service.save(state);
   }
