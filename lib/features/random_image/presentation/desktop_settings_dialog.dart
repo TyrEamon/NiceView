@@ -65,7 +65,7 @@ class _DesktopSettingsDialogState
                 title: '代理',
                 trailing: Switch(
                   value: _proxyEnabled,
-                  activeColor: niceAmber,
+                  activeThumbColor: niceAmber,
                   onChanged: (value) {
                     setState(() => _proxyEnabled = value);
                   },
