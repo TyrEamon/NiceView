@@ -27,6 +27,29 @@ jobs:
       - name: Generate Windows platform files
         run: flutter create --platforms=windows .
 
+      - name: Silence Windows coroutine deprecation in generated CMake
+        shell: pwsh
+        run: |
+          $cmakePath = "windows/CMakeLists.txt"
+          $definition = "add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)"
+          $lines = Get-Content -LiteralPath $cmakePath
+          if ($lines -notcontains $definition) {
+            $updated = [System.Collections.Generic.List[string]]::new()
+            $inserted = $false
+            foreach ($line in $lines) {
+              $updated.Add($line)
+              if (!$inserted -and $line -match '^project\(') {
+                $updated.Add($definition)
+                $inserted = $true
+              }
+            }
+            if (!$inserted) {
+              Write-Error "project(...) line not found in $cmakePath"
+              exit 1
+            }
+            Set-Content -LiteralPath $cmakePath -Value $updated
+          }
+
       - name: Remove generated default widget test
         shell: pwsh
         run: Remove-Item -Force -ErrorAction SilentlyContinue test/widget_test.dart
@@ -41,6 +64,8 @@ jobs:
         run: flutter test
 
       - name: Build Windows release
+        env:
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: flutter build windows --release
 
       - name: Package zip
