@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../../../services/app_exceptions.dart';
+import '../../../services/desktop_paths.dart';
 import '../../random_image/domain/favorite_image.dart';
 
 final backupServiceProvider = Provider<BackupService>((ref) {
@@ -50,7 +50,7 @@ class BackupService {
       }
     }
 
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await getNiceViewDesktopOutputDirectory();
     final file = File(p.join(directory.path, document.fileName));
     await file.writeAsBytes(document.bytes, flush: true);
     return file.path;
@@ -66,7 +66,7 @@ class BackupService {
         throw NiceViewException(error.message ?? '备份导入失败');
       }
     } else {
-      final directory = await getApplicationDocumentsDirectory();
+      final directory = await getNiceViewDesktopOutputDirectory();
       final file = File(p.join(directory.path, 'niceview-backup.json'));
       if (!await file.exists()) {
         throw NiceViewException('没有找到备份文件：${file.path}');
