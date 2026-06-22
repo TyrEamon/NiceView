@@ -1,0 +1,60 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Windows release
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Generate Windows platform files
+        run: flutter create --platforms=windows .
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $releasePath = "build/windows/x64/runner/Release"
+          if (!(Test-Path $releasePath)) {
+            $releasePath = "build/windows/runner/Release"
+          }
+          if (!(Test-Path $releasePath)) {
+            Write-Error "Windows release directory not found."
+            exit 1
+          }
+          Compress-Archive -Path "$releasePath/*" -DestinationPath NiceView-windows.zip -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nice-view-windows
+          path: NiceView-windows.zip
+          if-no-files-found: error
