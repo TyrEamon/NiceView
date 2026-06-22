@@ -6,10 +6,12 @@ import '../../domain/quota_state.dart';
 class ServerLockoutOverlay extends StatelessWidget {
   const ServerLockoutOverlay({
     required this.quota,
+    this.onRetryNow,
     super.key,
   });
 
   final QuotaState quota;
+  final VoidCallback? onRetryNow;
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +48,17 @@ class ServerLockoutOverlay extends StatelessWidget {
                   '服务器冷却中，稍后再试。',
                   style: TextStyle(color: niceMuted, fontSize: 13),
                 ),
+                if (onRetryNow != null) ...[
+                  const SizedBox(height: 18),
+                  OutlinedButton(
+                    onPressed: onRetryNow,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: niceAmber,
+                      side: const BorderSide(color: niceAmber),
+                    ),
+                    child: const Text('立即重试'),
+                  ),
+                ],
               ],
             ),
           ),

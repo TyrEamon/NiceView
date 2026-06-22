@@ -186,6 +186,11 @@ class RateLimiter extends StateNotifier<RateLimiterState> {
     await _saveState();
   }
 
+  Future<void> clearLockout() async {
+    state = _prunedState(_now()).copyWith(lockoutUntil: null);
+    await _saveState();
+  }
+
   Future<void> refresh() async {
     state = _prunedState(_now());
     await _saveState();

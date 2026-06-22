@@ -254,7 +254,16 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                           onHorizontalDragEnd: _handleDrawerDragEnd,
                         ),
                       ),
-                    ServerLockoutOverlay(quota: quota),
+                    ServerLockoutOverlay(
+                      quota: quota,
+                      onRetryNow: Platform.isWindows
+                          ? () {
+                              unawaited(
+                                controller.clearServerLockoutAndRetry(),
+                              );
+                            }
+                          : null,
+                    ),
                   ],
                 );
               },

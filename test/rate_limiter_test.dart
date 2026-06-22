@@ -91,4 +91,26 @@ void main() {
     expect(restored.state.isLockout, isTrue);
     expect(restored.state.lockoutRemaining, const Duration(minutes: 25));
   });
+
+  test('clearLockout removes persisted server lockout', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final now = DateTime(2026, 6, 21, 12);
+    final limiter = RateLimiter(
+      preferences,
+      now: () => now,
+    );
+
+    await limiter.noteLockout();
+    expect(limiter.state.isLockout, isTrue);
+
+    await limiter.clearLockout();
+
+    expect(limiter.state.isLockout, isFalse);
+    final restored = RateLimiter(
+      preferences,
+      now: () => now.add(const Duration(minutes: 1)),
+    );
+    expect(restored.state.isLockout, isFalse);
+  });
 }
