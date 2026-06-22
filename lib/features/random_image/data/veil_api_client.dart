@@ -7,13 +7,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/app_exceptions.dart';
+import '../../../services/desktop_settings.dart';
 import '../../../services/rate_limiter.dart';
 import '../../tags/domain/tag_info.dart';
 import '../domain/gallery_detail.dart';
 import '../domain/image_metadata.dart';
 
 final veilApiClientProvider = Provider<VeilApiClient>((ref) {
-  return VeilApiClient(ref.watch(rateLimiterProvider.notifier));
+  final client = VeilApiClient(
+    ref.watch(rateLimiterProvider.notifier),
+    readSettings: () => ref.read(desktopSettingsProvider),
+  );
+  ref.onDispose(client.close);
+  return client;
 });
 
 class VeilImageResponse {
@@ -31,9 +37,19 @@ class VeilImageResponse {
 }
 
 class VeilApiClient {
-  VeilApiClient(this._rateLimiter) : _client = HttpClient() {
+  VeilApiClient(
+    this._rateLimiter, {
+    required DesktopSettings Function() readSettings,
+  })  : _readSettings = readSettings,
+        _client = HttpClient() {
     _client.connectionTimeout = const Duration(seconds: 60);
     _client.idleTimeout = const Duration(seconds: 15);
+    if (Platform.isWindows) {
+      _client.findProxy = (_) {
+        final settings = _readSettings();
+        return settings.hasProxy ? settings.proxyRule : 'DIRECT';
+      };
+    }
   }
 
   static const _host = 'veil.ortlinde.com';
@@ -41,6 +57,7 @@ class VeilApiClient {
 
   final HttpClient _client;
   final RateLimiter _rateLimiter;
+  final DesktopSettings Function() _readSettings;
 
   Future<VeilImageResponse> random({String? tag}) {
     return _imageRequest(
@@ -51,6 +68,10 @@ class VeilApiClient {
 
   Future<VeilImageResponse> imageById(int imageId) {
     return _imageRequest('/v1/image/$imageId');
+  }
+
+  void close() {
+    _client.close(force: true);
   }
 
   Future<GalleryDetail> gallery(int id) async {
@@ -79,7 +100,8 @@ class VeilApiClient {
       final request = await _client.getUrl(uri).timeout(_receiveTimeout);
       request.headers
         ..set(HttpHeaders.acceptHeader, 'application/json')
-        ..set(HttpHeaders.userAgentHeader, 'NiceView/1.0');
+        ..set(HttpHeaders.userAgentHeader, 'NiceView/1.0')
+        ..set(HttpHeaders.connectionHeader, 'close');
       response = await request.close().timeout(_receiveTimeout);
     } on TimeoutException catch (error) {
       _log('metadata request timeout: $error');
@@ -200,7 +222,8 @@ class VeilApiClient {
       final request = await _client.getUrl(uri).timeout(_receiveTimeout);
       request.headers
         ..set(HttpHeaders.acceptHeader, 'application/json')
-        ..set(HttpHeaders.userAgentHeader, 'NiceView/1.0');
+        ..set(HttpHeaders.userAgentHeader, 'NiceView/1.0')
+        ..set(HttpHeaders.connectionHeader, 'close');
       response = await request.close().timeout(_receiveTimeout);
     } on TimeoutException catch (error) {
       _log('json request timeout: $error');
@@ -274,7 +297,8 @@ class VeilApiClient {
       final request = await _client.getUrl(uri).timeout(_receiveTimeout);
       request.headers
         ..set(HttpHeaders.acceptHeader, 'image/*,*/*;q=0.8')
-        ..set(HttpHeaders.userAgentHeader, 'NiceView/1.0');
+        ..set(HttpHeaders.userAgentHeader, 'NiceView/1.0')
+        ..set(HttpHeaders.connectionHeader, 'close');
       response = await request.close().timeout(_receiveTimeout);
     } on TimeoutException catch (error) {
       _log('request timeout: $error');

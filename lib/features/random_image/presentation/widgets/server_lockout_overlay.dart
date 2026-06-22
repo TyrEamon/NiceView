@@ -7,11 +7,13 @@ class ServerLockoutOverlay extends StatelessWidget {
   const ServerLockoutOverlay({
     required this.quota,
     this.onRetryNow,
+    this.onOpenSettings,
     super.key,
   });
 
   final QuotaState quota;
   final VoidCallback? onRetryNow;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -50,13 +52,25 @@ class ServerLockoutOverlay extends StatelessWidget {
                 ),
                 if (onRetryNow != null) ...[
                   const SizedBox(height: 18),
-                  OutlinedButton(
-                    onPressed: onRetryNow,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: niceAmber,
-                      side: const BorderSide(color: niceAmber),
-                    ),
-                    child: const Text('立即重试'),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      OutlinedButton(
+                        onPressed: onRetryNow,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: niceAmber,
+                          side: const BorderSide(color: niceAmber),
+                        ),
+                        child: const Text('立即重试'),
+                      ),
+                      if (onOpenSettings != null)
+                        TextButton(
+                          onPressed: onOpenSettings,
+                          child: const Text('设置代理'),
+                        ),
+                    ],
                   ),
                 ],
               ],

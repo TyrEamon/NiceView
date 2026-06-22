@@ -10,6 +10,7 @@ import '../../../app/top_snack_bar.dart';
 import '../../../services/quota_service.dart';
 import '../../backup/presentation/backup_page.dart';
 import '../../tags/presentation/tag_library_page.dart';
+import 'desktop_settings_dialog.dart';
 import 'favorites_page.dart';
 import 'history_page.dart';
 import 'random_image_controller.dart';
@@ -203,6 +204,15 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                                 onDisabledPressed: controller.nextImage,
                               ),
                             ),
+                            if (Platform.isWindows)
+                              Positioned(
+                                top: padding.top + 18,
+                                right: 22,
+                                child: _DesktopSettingsButton(
+                                  opacity: buttonOpacity,
+                                  onPressed: _openDesktopSettings,
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -264,6 +274,8 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                               );
                             }
                           : null,
+                      onOpenSettings:
+                          Platform.isWindows ? _openDesktopSettings : null,
                     ),
                   ],
                 );
@@ -386,6 +398,11 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
     );
   }
 
+  Future<void> _openDesktopSettings() async {
+    _closeDrawer();
+    await showDesktopSettingsDialog(context);
+  }
+
   Future<void> _openTagLibrary() async {
     _closeDrawer();
     final tag = await Navigator.of(context).push<String>(
@@ -395,6 +412,39 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
       return;
     }
     await ref.read(randomImageControllerProvider.notifier).useMetadataTag(tag);
+  }
+}
+
+class _DesktopSettingsButton extends StatelessWidget {
+  const _DesktopSettingsButton({
+    required this.opacity,
+    required this.onPressed,
+  });
+
+  final double opacity;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 160),
+      opacity: opacity,
+      child: SizedBox.square(
+        dimension: 46,
+        child: Material(
+          color: Colors.black.withValues(alpha: 0.62),
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: Tooltip(
+            message: '桌面设置',
+            child: InkWell(
+              onTap: onPressed,
+              child: const Icon(Icons.settings_rounded, size: 22),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
