@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/app_exceptions.dart';
 import '../../../services/download_service.dart';
 import '../../../services/quota_service.dart';
+import '../../../services/rate_limiter.dart';
 import '../../backup/data/backup_service.dart';
 import '../../backup/data/webdav_config_store.dart';
 import '../../backup/data/webdav_service.dart';
@@ -35,6 +36,7 @@ final randomImageControllerProvider =
     webDavService: ref.watch(webDavServiceProvider),
     downloadService: ref.watch(downloadServiceProvider),
     quotaController: ref.read(quotaControllerProvider.notifier),
+    rateLimiter: ref.read(rateLimiterProvider.notifier),
     readQuotaState: () => ref.read(quotaControllerProvider),
   );
   unawaited(controller.initialize());
@@ -45,6 +47,7 @@ const _unset = Object();
 const _defaultPreloadTarget = 6;
 const _adjacentPreloadTarget = 6;
 const _recentLocalImageLimit = 48;
+const _serverLimitedMessage = '请求暂时受限，请稍后或切换网络后重试。';
 
 class RandomImageViewState {
   const RandomImageViewState({
@@ -191,6 +194,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     required WebDavService webDavService,
     required DownloadService downloadService,
     required QuotaController quotaController,
+    required RateLimiter rateLimiter,
     required QuotaState Function() readQuotaState,
   })  : _repository = repository,
         _tagStore = tagStore,
@@ -201,6 +205,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
         _webDavService = webDavService,
         _downloadService = downloadService,
         _quotaController = quotaController,
+        _rateLimiter = rateLimiter,
         _readQuotaState = readQuotaState,
         super(RandomImageViewState.initial());
 
@@ -213,6 +218,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
   final WebDavService _webDavService;
   final DownloadService _downloadService;
   final QuotaController _quotaController;
+  final RateLimiter _rateLimiter;
   final QuotaState Function() _readQuotaState;
   final ListQueue<int> _recentImageIds = ListQueue<int>();
   final Map<int, RandomImage> _recentLocalImagesById = <int, RandomImage>{};
@@ -305,7 +311,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
       return;
     }
     if (_readQuotaState().isServerLocked) {
-      state = state.copyWith(errorMessage: '服务器冷却中，稍后再试。');
+      state = state.copyWith(errorMessage: _serverLimitedMessage);
       return;
     }
 
@@ -778,7 +784,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     }
 
     if (_readQuotaState().isServerLocked) {
-      state = state.copyWith(errorMessage: '服务器冷却中，稍后再试。');
+      state = state.copyWith(errorMessage: _serverLimitedMessage);
       return;
     }
 
@@ -1067,6 +1073,12 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
 
   Future<void> retryCurrent() async {
     await _loadFreshCurrent(isInitial: state.currentImage == null);
+  }
+
+  Future<void> clearServerLockoutAndRetry() async {
+    await _rateLimiter.clearLockout();
+    await _quotaController.clearServerLockout();
+    await retryCurrent();
   }
 
   Future<RandomImage?> _restoreLastCurrent(
@@ -1422,7 +1434,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
 
   String _messageForError(Object error) {
     if (error is ServerLockoutException) {
-      return '服务器冷却中，稍后再试。';
+      return _serverLimitedMessage;
     }
     if (error is QuotaExceededException) {
       return _quotaRecoveryMessage();

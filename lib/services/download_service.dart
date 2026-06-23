@@ -3,19 +3,22 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../features/random_image/domain/random_image.dart';
 import '../features/random_image/data/random_image_repository.dart';
+import '../features/random_image/domain/random_image.dart';
 import 'app_exceptions.dart';
+import 'desktop_paths.dart';
+import 'desktop_settings.dart';
 
 final downloadServiceProvider = Provider<DownloadService>((ref) {
-  return const DownloadService();
+  return DownloadService(() => ref.read(desktopSettingsProvider));
 });
 
 class DownloadService {
-  const DownloadService();
+  const DownloadService(this._readSettings);
+
+  final DesktopSettings Function() _readSettings;
 
   static const _channel = MethodChannel('nice_view/downloads');
 
@@ -49,7 +52,9 @@ class DownloadService {
       }
     }
 
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await getNiceViewDesktopOutputDirectory(
+      customDirectory: _readSettings().downloadDirectory,
+    );
     final outputDirectory = safeSubDir == null || safeSubDir.isEmpty
         ? directory
         : Directory(p.join(directory.path, safeSubDir));

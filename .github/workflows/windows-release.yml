@@ -1,0 +1,89 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Windows release
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Generate Windows platform files
+        run: flutter create --platforms=windows .
+
+      - name: Silence Windows coroutine deprecation in generated CMake
+        shell: pwsh
+        run: |
+          $cmakePath = "windows/CMakeLists.txt"
+          $definition = "add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)"
+          $lines = Get-Content -LiteralPath $cmakePath
+          if ($lines -notcontains $definition) {
+            $updated = [System.Collections.Generic.List[string]]::new()
+            $inserted = $false
+            foreach ($line in $lines) {
+              $updated.Add($line)
+              if (!$inserted -and $line -match '^project\(') {
+                $updated.Add($definition)
+                $inserted = $true
+              }
+            }
+            if (!$inserted) {
+              Write-Error "project(...) line not found in $cmakePath"
+              exit 1
+            }
+            Set-Content -LiteralPath $cmakePath -Value $updated
+          }
+
+      - name: Remove generated default widget test
+        shell: pwsh
+        run: Remove-Item -Force -ErrorAction SilentlyContinue test/widget_test.dart
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Windows release
+        env:
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+        run: flutter build windows --release
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $releasePath = "build/windows/x64/runner/Release"
+          if (!(Test-Path $releasePath)) {
+            $releasePath = "build/windows/runner/Release"
+          }
+          if (!(Test-Path $releasePath)) {
+            Write-Error "Windows release directory not found."
+            exit 1
+          }
+          Compress-Archive -Path "$releasePath/*" -DestinationPath NiceView-windows.zip -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nice-view-windows
+          path: NiceView-windows.zip
+          if-no-files-found: error
