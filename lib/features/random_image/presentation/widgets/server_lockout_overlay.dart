@@ -34,46 +34,64 @@ class ServerLockoutOverlay extends StatelessWidget {
         children: [
           const ModalBarrier(color: Colors.black, dismissible: false),
           Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: niceText,
-                    fontSize: 48,
-                    fontWeight: FontWeight.w800,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: niceText,
+                      fontSize: 48,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  '服务器冷却中，稍后再试。',
-                  style: TextStyle(color: niceMuted, fontSize: 13),
-                ),
-                if (onRetryNow != null) ...[
-                  const SizedBox(height: 18),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      OutlinedButton(
-                        onPressed: onRetryNow,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: niceAmber,
-                          side: const BorderSide(color: niceAmber),
-                        ),
-                        child: const Text('立即重试'),
-                      ),
-                      if (onOpenSettings != null)
-                        TextButton(
-                          onPressed: onOpenSettings,
-                          child: const Text('设置代理'),
-                        ),
-                    ],
+                  const SizedBox(height: 12),
+                  const Text(
+                    '请求暂时受限',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: niceText,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '可能触发了 300s 请求限制，或当前网络/IP 被服务端限制。可以稍后再试，或切换网络、代理后立即重试。',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: niceMuted,
+                      fontSize: 13,
+                      height: 1.45,
+                    ),
+                  ),
+                  if (onRetryNow != null) ...[
+                    const SizedBox(height: 18),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        OutlinedButton(
+                          onPressed: onRetryNow,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: niceAmber,
+                            side: const BorderSide(color: niceAmber),
+                          ),
+                          child: const Text('立即重试'),
+                        ),
+                        if (onOpenSettings != null)
+                          TextButton(
+                            onPressed: onOpenSettings,
+                            child: const Text('设置代理'),
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ],

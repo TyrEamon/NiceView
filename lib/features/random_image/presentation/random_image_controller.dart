@@ -47,6 +47,7 @@ const _unset = Object();
 const _defaultPreloadTarget = 6;
 const _adjacentPreloadTarget = 6;
 const _recentLocalImageLimit = 48;
+const _serverLimitedMessage = '请求暂时受限，请稍后或切换网络后重试。';
 
 class RandomImageViewState {
   const RandomImageViewState({
@@ -310,7 +311,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
       return;
     }
     if (_readQuotaState().isServerLocked) {
-      state = state.copyWith(errorMessage: '服务器冷却中，稍后再试。');
+      state = state.copyWith(errorMessage: _serverLimitedMessage);
       return;
     }
 
@@ -783,7 +784,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
     }
 
     if (_readQuotaState().isServerLocked) {
-      state = state.copyWith(errorMessage: '服务器冷却中，稍后再试。');
+      state = state.copyWith(errorMessage: _serverLimitedMessage);
       return;
     }
 
@@ -1433,7 +1434,7 @@ class RandomImageController extends StateNotifier<RandomImageViewState> {
 
   String _messageForError(Object error) {
     if (error is ServerLockoutException) {
-      return '服务器冷却中，稍后再试。';
+      return _serverLimitedMessage;
     }
     if (error is QuotaExceededException) {
       return _quotaRecoveryMessage();

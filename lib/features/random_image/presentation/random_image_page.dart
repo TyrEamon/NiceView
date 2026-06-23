@@ -267,13 +267,9 @@ class _RandomImagePageState extends ConsumerState<RandomImagePage>
                       ),
                     ServerLockoutOverlay(
                       quota: quota,
-                      onRetryNow: Platform.isWindows
-                          ? () {
-                              unawaited(
-                                controller.clearServerLockoutAndRetry(),
-                              );
-                            }
-                          : null,
+                      onRetryNow: () {
+                        unawaited(controller.clearServerLockoutAndRetry());
+                      },
                       onOpenSettings:
                           Platform.isWindows ? _openDesktopSettings : null,
                     ),
